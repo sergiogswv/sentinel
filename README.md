@@ -8,19 +8,21 @@ Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de cód
 
 ## Características principales
 
-- 🔍 **Monitoreo en tiempo real** del sistema de archivos (directorio `src/`)
+- 🔍 **Monitoreo en tiempo real** del sistema de archivos (directorio `src/`) con debounce para evitar procesamiento duplicado
 - 🤖 **Análisis automático de código con Claude AI**
   - Principios SOLID
   - Clean Code
   - Buenas prácticas NestJS
-- 🧪 **Detección y ejecución de tests con Jest**
+  - Consejo textual visible en consola, código sugerido solo en archivo `.suggested`
+- 🧪 **Detección y ejecución de tests con Jest** con salida visible en tiempo real en la consola
 - 📝 **Flujo interactivo de commits en Git** con timeout de 30 segundos
 - 💡 **Generación de sugerencias de código** guardadas en archivos `.suggested`
 - ⏸️ **Mecanismo de pausa** mediante archivo `.sentinel-pause` o comando 'p'
 - ✨ **Mensajes de commit inteligentes** siguiendo Conventional Commits
-- 🔧 **Diagnóstico automático de fallos en tests**
+- 🔧 **Diagnóstico automático de fallos en tests** con timeout de 30 segundos
 - 📚 **Auto-documentación técnica** - genera archivos .md junto a cada .ts con "manual de bolsillo" generado por IA
 - 📊 **Reportes diarios de productividad** - genera resúmenes inteligentes de los commits del día (comando 'r')
+- 🔄 **Stdin centralizado** - lectura de input sin conflictos entre hilos
 
 ## Requisitos
 
@@ -113,7 +115,7 @@ Para cada archivo `src/module/file.ts`, debe existir `test/module/file.spec.ts`.
 
 ### Controles interactivos
 
-Sentinel v3.2 incluye comandos de teclado para control en tiempo real:
+Sentinel v3.3 incluye comandos de teclado para control en tiempo real:
 
 #### Pausar/Reanudar (comando 'p')
 
@@ -189,16 +191,24 @@ Cuando los tests fallan:
 🔔 CAMBIO EN: users.service.ts
 
 ✨ CONSEJO DE CLAUDE:
-SEGURO - El código sigue correctamente el patrón Repository...
+SEGURO - El código sigue correctamente el patrón Repository.
+Se recomienda agregar validación en el método create().
 
    ✅ Arquitectura aprobada.
 🧪 Ejecutando Jest para: test/users/users.spec.ts
+
+  [Jest output visible en tiempo real...]
+  PASS  test/users/users.spec.ts
+
    ✅ Tests pasados con éxito
 
 📝 Generando mensaje de commit inteligente...
 🚀 Mensaje sugerido: feat: add findAll method to users service
-📝 ¿Quieres hacer commit? (s/n, timeout 30s):
+📝 ¿Quieres hacer commit? (s/n, timeout 30s): n
+   ⏭️  Commit omitido.
 ```
+
+> **Nota:** El consejo de Claude muestra solo el texto explicativo. El código sugerido se guarda en `users.service.ts.suggested`.
 
 ### Ejemplo 2: Problemas detectados
 
@@ -206,7 +216,8 @@ SEGURO - El código sigue correctamente el patrón Repository...
 🔔 CAMBIO EN: products.controller.ts
 
 ✨ CONSEJO DE CLAUDE:
-CRITICO - Violación del principio de responsabilidad única (SRP)...
+CRITICO - Violación del principio de responsabilidad única (SRP).
+El controlador está accediendo directamente a la base de datos.
 
    ❌ CRITICO: Corrige SOLID/Bugs
 ```
@@ -217,19 +228,31 @@ CRITICO - Violación del principio de responsabilidad única (SRP)...
 🔔 CAMBIO EN: auth.service.ts
    ✅ Arquitectura aprobada.
 🧪 Ejecutando Jest para: test/auth/auth.spec.ts
+
+  [Jest output visible en tiempo real...]
+  FAIL  test/auth/auth.spec.ts
+
    ❌ Tests fallaron
 
-🔍 ¿Analizar error con IA? (s/n): s
+🔍 ¿Analizar error con IA? (s/n, timeout 30s): s
 
 🔍 Analizando fallo en tests...
 💡 SOLUCIÓN SUGERIDA:
 El problema está en que el método `validateUser` no está manejando...
 ```
 
-### Ejemplo 4: Reporte diario de productividad
+### Ejemplo 4: Timeout sin respuesta
 
 ```
-🛡️  Sentinel v3.2 activo en: C:\projects\mi-api-nestjs
+🚀 Mensaje sugerido: feat: add user validation
+📝 ¿Quieres hacer commit? (s/n, timeout 30s):
+   ⏭️  Timeout, commit omitido.
+```
+
+### Ejemplo 5: Reporte diario de productividad
+
+```
+🛡️  Sentinel v3.3 activo en: C:\projects\mi-api-nestjs
 
 [... trabajas durante el día, haciendo varios commits ...]
 
@@ -291,12 +314,14 @@ r  ← [Usuario presiona 'r']
 └─────────────────┘
 ```
 
-### Comandos interactivos (hilo de teclado)
+### Hilo de teclado (stdin centralizado)
 
 ```
 ┌─────────────────┐
-│  Usuario (stdin)│
+│  Usuario (stdin)│  ← Único punto de lectura de stdin
 └────────┬────────┘
+         │
+         ├─ [esperando input] ──▶ Reenvía respuesta al loop principal (s/n)
          │
          ├─ 'p' ──▶ Pausar/Reanudar
          │
@@ -313,17 +338,23 @@ r  ← [Usuario presiona 'r']
                              └─▶ docs/DAILY_REPORT.md
 ```
 
+### Debounce y drenado de eventos
+
+- Eventos duplicados del mismo archivo se ignoran dentro de una ventana de 15 segundos
+- Al terminar de procesar un archivo, se drenan todos los eventos pendientes del canal
+- Esto evita reprocesar el mismo archivo cuando el editor genera múltiples eventos de escritura
+
 ### Componentes principales
 
 | Componente | Descripción |
 |------------|-------------|
 | `consultar_claude()` | Comunicación con API de Claude AI (Anthropic) |
 | `analizar_arquitectura()` | Evaluación de código basada en SOLID y Clean Code |
-| `ejecutar_tests()` | Ejecución de tests de Jest relacionados |
+| `ejecutar_tests()` | Ejecución de tests de Jest con salida visible en consola |
 | `pedir_ayuda_test()` | Diagnóstico de fallos con IA |
 | `actualizar_documentacion()` | Genera "manual de bolsillo" .md junto a cada archivo .ts |
 | `generar_mensaje_commit()` | Generación de mensajes siguiendo Conventional Commits |
-| `preguntar_commit()` | Flujo interactivo de commits con timeout |
+| `preguntar_commit()` | Ejecuta commit si el usuario acepta (recibe respuesta del loop principal) |
 | `obtener_resumen_git()` | Obtiene commits del día usando git log |
 | `generar_reporte_diario()` | Crea reporte de productividad con IA basado en commits |
 
@@ -436,6 +467,7 @@ curl -I https://api.anthropic.com
 - Verifica que estás modificando archivos `.ts` en el directorio `src/`
 - Archivos `.spec.ts` y `.suggested` son ignorados intencionalmente
 - Revisa que el watcher esté activo (no pausado con 'p' o `.sentinel-pause`)
+- El debounce ignora eventos del mismo archivo dentro de 15 segundos; espera antes de guardar de nuevo
 
 ### Tests no se ejecutan
 
@@ -471,6 +503,10 @@ curl -I https://api.anthropic.com
 
 - [x] Reportes diarios de productividad (v3.2)
 - [x] Auto-documentación de archivos (v3.1)
+- [x] Stdin centralizado sin conflictos entre hilos (v3.3)
+- [x] Tests de Jest visibles en consola en tiempo real (v3.3)
+- [x] Sugerencias de código solo en archivo .suggested, no en consola (v3.3)
+- [x] Debounce y drenado de eventos duplicados del watcher (v3.3)
 - [ ] Soporte para otros frameworks (Angular, React, Vue)
 - [ ] Configuración personalizable mediante archivo `.sentinelrc`
 - [ ] Integración con otros runners de tests (Vitest, Mocha)

@@ -23,18 +23,16 @@ use crate::ai;
 /// * `Err(String)` - Tests fallaron, con salida de error completa
 pub fn ejecutar_tests(test_path: &str, project_path: &Path) -> Result<(), String> {
     println!("\n🧪 Ejecutando Jest para: {}", test_path.cyan());
-    let output = Command::new("npm")
+    let status = Command::new("npm")
         .args(["run", "test", "--", "--findRelatedTests", test_path])
         .current_dir(project_path)
-        .output()
+        .status()
         .map_err(|e| e.to_string())?;
 
-    if output.status.success() {
+    if status.success() {
         Ok(())
     } else {
-        Err(format!("{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)))
+        Err(format!("Tests fallaron con código de salida: {}", status))
     }
 }
 

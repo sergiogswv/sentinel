@@ -4,10 +4,7 @@
 
 use std::process::Command;
 use std::path::Path;
-use std::io::{self, Write};
 use std::fs;
-use std::thread;
-use std::time::Duration;
 use colored::*;
 use crate::ai;
 
@@ -164,26 +161,14 @@ pub fn generar_reporte_diario(project_path: &Path) {
 /// - Timeout de 30 segundos
 /// - Requiere respuesta 's' para confirmar (cualquier otra input se ignora)
 /// - Ejecuta git add y git commit de forma secuencial si se confirma
-pub fn preguntar_commit(project_path: &Path, mensaje: &str) {
-    println!("\n🚀 Mensaje sugerido: {}", mensaje.bright_cyan().bold());
-    print!("📝 ¿Quieres hacer commit? (s/n, timeout 30s): ");
-    io::stdout().flush().unwrap();
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    thread::spawn(move || {
-        let mut respuesta = String::new();
-        if io::stdin().read_line(&mut respuesta).is_ok() {
-            let _ = tx.send(respuesta.trim().to_lowercase());
+pub fn preguntar_commit(project_path: &Path, mensaje: &str, respuesta: &str) {
+    if respuesta == "s" {
+        Command::new("git").args(["add", "."]).current_dir(project_path).status().ok();
+        match Command::new("git").args(["commit", "-m", mensaje]).current_dir(project_path).status() {
+            Ok(_) => println!("   ✅ Commit exitoso!"),
+            Err(e) => println!("   ❌ Error: {}", e),
         }
-    });
-
-    if let Ok(r) = rx.recv_timeout(Duration::from_secs(30)) {
-        if r == "s" {
-            Command::new("git").args(["add", "."]).current_dir(project_path).status().ok();
-            match Command::new("git").args(["commit", "-m", mensaje]).current_dir(project_path).status() {
-                Ok(_) => println!("   ✅ Commit exitoso!"),
-                Err(e) => println!("   ❌ Error: {}", e),
-            }
-        }
+    } else {
+        println!("   ⏭️  Commit omitido.");
     }
 }

@@ -81,10 +81,12 @@ pub fn analizar_arquitectura(codigo: &str, file_name: &str) -> anyhow::Result<bo
     );
 
     let respuesta = consultar_claude(prompt)?;
-    println!("\n✨ CONSEJO DE CLAUDE:\n{}", respuesta);
 
     let sugerencia = extraer_codigo(&respuesta);
-    fs::write(format!("{}.suggested", file_name), sugerencia)?;
+    fs::write(format!("{}.suggested", file_name), &sugerencia)?;
+
+    let consejo = eliminar_bloques_codigo(&respuesta);
+    println!("\n✨ CONSEJO DE CLAUDE:\n{}", consejo);
 
     Ok(!respuesta.trim().to_uppercase().starts_with("CRITICO"))
 }
@@ -101,6 +103,22 @@ pub fn analizar_arquitectura(codigo: &str, file_name: &str) -> anyhow::Result<bo
 /// # Retorna
 ///
 /// Código TypeScript extraído (sin delimitadores) o el texto original.
+
+fn eliminar_bloques_codigo(texto: &str) -> String {
+    let mut resultado = String::new();
+    let mut dentro_bloque = false;
+    for linea in texto.lines() {
+        if linea.trim_start().starts_with("```") {
+            dentro_bloque = !dentro_bloque;
+            continue;
+        }
+        if !dentro_bloque {
+            resultado.push_str(linea);
+            resultado.push('\n');
+        }
+    }
+    resultado.trim().to_string()
+}
 
 pub fn extraer_codigo(texto: &str) -> String {
     if let Some(start) = texto.find("```typescript") {

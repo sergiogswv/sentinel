@@ -28,10 +28,12 @@
 
 use colored::*;
 use notify::{Event, EventKind, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
+use std::time::Instant;
 
 // Módulos
 mod ai;
@@ -42,7 +44,7 @@ mod ui;
 
 // --- MAIN ---
 
-/// Punto de entrada principal de Sentinel v3.2.
+/// Punto de entrada principal de Sentinel v3.3.
 ///
 /// # Flujo de ejecución
 ///
@@ -102,13 +104,22 @@ fn main() {
     // 4. EL CANAL (Debe estar aquí afuera para que 'rx' sea visible en el loop)
     let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
 
-    // Hilo de Teclado (Pausa 'P' y Reporte 'R')
+    // Canal para reenviar input de stdin al loop principal cuando se espera respuesta
+    let (stdin_tx, stdin_rx) = mpsc::channel::<String>();
+    let stdin_rx = Arc::new(Mutex::new(stdin_rx));
+    let esperando_input = Arc::new(Mutex::new(false));
+    let esperando_input_hilo = Arc::clone(&esperando_input);
+
+    // Hilo de Teclado (Pausa 'P', Reporte 'R', y reenvío de respuestas)
     thread::spawn(move || {
         loop {
             let mut input = String::new();
             if io::stdin().read_line(&mut input).is_ok() {
                 let cmd = input.trim().to_lowercase();
-                if cmd == "p" {
+                // Si el loop principal espera una respuesta, reenviar el input
+                if *esperando_input_hilo.lock().unwrap() {
+                    let _ = stdin_tx.send(cmd);
+                } else if cmd == "p" {
                     let mut p = pausa_hilo.lock().unwrap();
                     *p = !*p;
                     println!(" ⌨️  SENTINEL: {}", if *p { "PAUSADO".yellow() } else { "ACTIVO".green() });
@@ -135,14 +146,38 @@ fn main() {
     }).unwrap();
 
     watcher.watch(&path_to_watch, RecursiveMode::Recursive).unwrap();
-    println!("\n{} {}", "🛡️  Sentinel v3.2 activo en:".green(), project_path.display());
+    println!("\n{} {}", "🛡️  Sentinel v3.3 activo en:".green(), project_path.display());
+
+    // Helper: pedir input al usuario a través del hilo de teclado (timeout 30s)
+    let esperando_ref = Arc::clone(&esperando_input);
+    let stdin_rx_ref = Arc::clone(&stdin_rx);
+    let leer_respuesta = move || -> Option<String> {
+        *esperando_ref.lock().unwrap() = true;
+        let resultado = stdin_rx_ref.lock().unwrap()
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .ok();
+        *esperando_ref.lock().unwrap() = false;
+        resultado
+    };
 
     // 6. EL LOOP PRINCIPAL (Ahora 'rx' sí existe aquí)
-    for changed_path in rx {
+    let mut ultimo_cambio: HashMap<PathBuf, Instant> = HashMap::new();
+    let debounce = std::time::Duration::from_secs(15);
+
+    while let Ok(changed_path) = rx.recv() {
         // Verificamos pausa (Archivo físico o Tecla P)
         if pause_file_hilo.exists() || *pausa_loop.lock().unwrap() {
             continue;
         }
+
+        // Debounce: ignorar si el mismo archivo se procesó hace menos de 2 segundos
+        let ahora = Instant::now();
+        if let Some(ultimo) = ultimo_cambio.get(&changed_path) {
+            if ahora.duration_since(*ultimo) < debounce {
+                continue;
+            }
+        }
+        ultimo_cambio.insert(changed_path.clone(), ahora);
 
         // Rust ahora sabe que changed_path es un PathBuf
         let file_name = changed_path.file_name().unwrap().to_str().unwrap().to_string();
@@ -169,15 +204,19 @@ fn main() {
                             println!("{}", "   ✅ Tests pasados con éxito".green().bold());
                             let _ = docs::actualizar_documentacion(&codigo, &changed_path);
                             let mensaje_ia = git::generar_mensaje_commit(&codigo, &file_name);
-                            git::preguntar_commit(&project_path, &mensaje_ia);
+                            println!("\n🚀 Mensaje sugerido: {}", mensaje_ia.bright_cyan().bold());
+                            print!("📝 ¿Quieres hacer commit? (s/n, timeout 30s): ");
+                            io::stdout().flush().unwrap();
+                            match leer_respuesta() {
+                                Some(resp) => git::preguntar_commit(&project_path, &mensaje_ia, &resp),
+                                None => println!("   ⏭️  Timeout, commit omitido."),
+                            }
                         },
                         Err(err_msg) => {
                             println!("{}", "   ❌ Tests fallaron".red().bold());
-                            print!("\n🔍 ¿Analizar error con IA? (s/n): ");
+                            print!("\n🔍 ¿Analizar error con IA? (s/n, timeout 30s): ");
                             io::stdout().flush().unwrap();
-                            let mut res = String::new();
-                            io::stdin().read_line(&mut res).ok();
-                            if res.trim().to_lowercase() == "s" {
+                            if leer_respuesta().as_deref() == Some("s") {
                                 let _ = tests::pedir_ayuda_test(&codigo, &err_msg);
                             }
                         }
@@ -187,5 +226,9 @@ fn main() {
                 Err(e) => println!("   ⚠️  Error de IA: {}", e),
             }
         }
+
+        // Drenar eventos pendientes que se acumularon durante el procesamiento
+        while rx.try_recv().is_ok() {}
+        ultimo_cambio.insert(changed_path, Instant::now());
     }
 }

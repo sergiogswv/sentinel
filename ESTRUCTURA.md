@@ -26,6 +26,9 @@ src/
 - Coordinación entre módulos
 - Gestión de hilos (pausa/reporte)
 - Manejo de estado compartido (Arc/Mutex)
+- Lectura centralizada de stdin mediante canal compartido con el hilo de teclado
+- Debounce de eventos del watcher para evitar procesamiento duplicado
+- Drenado de eventos pendientes después de cada procesamiento
 
 **Funciones**:
 - `main()` - Punto de entrada principal
@@ -44,10 +47,15 @@ src/
   - Analiza código TypeScript/NestJS
   - Evalúa SOLID, Clean Code y buenas prácticas
   - Genera archivos `.suggested` con código mejorado
+  - En consola muestra solo el consejo textual (sin bloques de código)
 
 - `extraer_codigo(texto: &str) -> String`
   - Extrae bloques de código TypeScript de respuestas de Claude
   - Busca delimitadores \`\`\`typescript...\`\`\`
+
+**Funciones privadas**:
+- `eliminar_bloques_codigo(texto: &str) -> String`
+  - Filtra bloques de código de la respuesta para mostrar solo texto en consola
 
 **Dependencias**:
 - `reqwest` - Cliente HTTP
@@ -72,9 +80,9 @@ src/
   - Genera reporte dividido en: Logros, Aspectos Técnicos, Próximos Pasos
   - Guarda en `docs/DAILY_REPORT.md`
 
-- `preguntar_commit(project_path: &Path, mensaje: &str)`
-  - Flujo interactivo de commit con timeout de 30s
-  - Ejecuta `git add .` y `git commit -m` si el usuario acepta
+- `preguntar_commit(project_path: &Path, mensaje: &str, respuesta: &str)`
+  - Ejecuta `git add .` y `git commit -m` si la respuesta es "s"
+  - La lectura de stdin se centraliza en `main.rs` para evitar conflictos entre hilos
 
 **Dependencias**:
 - `crate::ai` - Para análisis con IA
@@ -87,7 +95,8 @@ src/
 **Funciones públicas**:
 - `ejecutar_tests(test_path: &str, project_path: &Path) -> Result<(), String>`
   - Ejecuta Jest con `npm run test -- --findRelatedTests`
-  - Retorna Ok si tests pasan, Err con salida de error si fallan
+  - Muestra la salida de Jest en tiempo real en la consola
+  - Retorna Ok si tests pasan, Err con código de salida si fallan
 
 - `pedir_ayuda_test(codigo: &str, error_jest: &str) -> Result<()>`
   - Solicita diagnóstico a Claude AI cuando tests fallan
@@ -134,19 +143,23 @@ src/
        │
        ├──▶ ui::seleccionar_proyecto()
        │
-       ├──▶ ai::analizar_arquitectura()
+       ├──▶ ai::analizar_arquitectura()  (consejo en consola, código en .suggested)
        │
-       ├──▶ tests::ejecutar_tests()
-       │        └──▶ tests::pedir_ayuda_test() [si falla]
+       ├──▶ tests::ejecutar_tests()      (salida de Jest visible en consola)
+       │        └──▶ tests::pedir_ayuda_test() [si falla, con timeout 30s]
        │
        ├──▶ docs::actualizar_documentacion()
        │
        └──▶ git::generar_mensaje_commit()
-            └──▶ git::preguntar_commit()
+            └──▶ git::preguntar_commit() [con timeout 30s]
 
-Comandos interactivos:
-  'p' ──▶ Pausa/Reanuda
-  'r' ──▶ git::generar_reporte_diario()
+Hilo de teclado (stdin centralizado):
+  'p'       ──▶ Pausa/Reanuda
+  'r'       ──▶ git::generar_reporte_diario()
+  's'/'n'   ──▶ Reenvía respuesta al loop principal (cuando espera input)
+
+Debounce: ignora eventos duplicados del mismo archivo (15s)
+Drenado: descarta eventos acumulados después de cada procesamiento
 ```
 
 ## Ventajas de esta Arquitectura

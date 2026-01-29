@@ -251,6 +251,109 @@ fn preguntar_commit(project_path: &Path, mensaje: &str) {
     }
 }
 
+/// Obtiene un resumen de los commits realizados hoy.
+///
+/// Ejecuta `git log --since=00:00:00` para obtener todos los mensajes de commit
+/// del día actual (desde las 00:00:00 hasta el momento presente).
+///
+/// # Argumentos
+///
+/// * `project_path` - Ruta del proyecto donde ejecutar el comando git
+///
+/// # Retorna
+///
+/// String con los mensajes de commit, uno por línea. String vacío si no hay commits.
+///
+/// # Panics
+///
+/// Si el comando git falla (repositorio no inicializado, git no instalado, etc.)
+fn obtener_resumen_git(project_path: &Path) -> String {
+    let output = Command::new("git")
+        .args([
+            "log",
+            "--since=00:00:00",
+            "--oneline",
+            "--pretty=format:%s"
+        ])
+        .current_dir(project_path)
+        .output()
+        .expect("Fallo al leer git logs");
+
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+/// Genera un reporte de productividad diario usando Claude AI.
+///
+/// Analiza todos los commits del día actual y genera un reporte profesional
+/// dividido en tres secciones:
+/// - ✨ Logros Principales
+/// - 🛠️ Aspectos Técnicos (NestJS/Rust)
+/// - 🚀 Próximos Pasos
+///
+/// # Argumentos
+///
+/// * `project_path` - Ruta del proyecto donde obtener commits y guardar el reporte
+///
+/// # Efectos secundarios
+///
+/// - Imprime el reporte en la consola
+/// - Guarda el reporte en `docs/DAILY_REPORT.md`
+///
+/// # Comportamiento
+///
+/// Si no hay commits del día, muestra advertencia y sale sin generar reporte.
+///
+/// # Ejemplo de uso
+///
+/// Presiona 'r' en la consola de Sentinel para generar el reporte.
+///
+/// # Formato de salida
+///
+/// ```markdown
+/// ✨ Logros Principales
+/// - Implementación de autenticación JWT
+/// - Migración de base de datos completada
+///
+/// 🛠️ Aspectos Técnicos
+/// - Integración con NestJS Guards
+/// - Refactorización de servicios
+///
+/// 🚀 Próximos Pasos
+/// - Testing de endpoints
+/// - Documentación de API
+/// ```
+fn generar_reporte_diario(project_path: &Path) {
+    println!("\n📊 {}...", "Generando reporte de productividad diaria".magenta().bold());
+
+    let logs = obtener_resumen_git(project_path);
+    if logs.is_empty() {
+        println!("{}", "⚠️ No hay commits registrados el día de hoy.".yellow());
+        return;
+    }
+
+    let prompt = format!(
+        "Actúa como un Lead Developer. Basado en estos mensajes de commit de hoy, \
+        genera un reporte de progreso diario para el equipo. \
+        Divide en: ✨ Logros Principales, 🛠️ Aspectos Técnicos (NestJS/Rust) y 🚀 Próximos Pasos. \
+        Sé profesional y directo.\n\nCommits del día:\n{}",
+        logs
+    );
+
+    match consultar_claude(prompt) {
+        Ok(reporte) => {
+            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("{}", "📝 REPORTE DIARIO DE SENTINEL".cyan().bold());
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            println!("{}", reporte);
+            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            // Opcional: Guardarlo en un archivo
+            let _ = fs::write(project_path.join("docs/DAILY_REPORT.md"), reporte);
+        },
+        Err(e) => println!("❌ Error al generar reporte: {}", e),
+    }
+}
+
 /// Genera un "manual de bolsillo" automático para cada archivo modificado.
 ///
 /// Crea documentación técnica ultra-concisa (máximo 150 palabras) en formato Markdown
@@ -371,13 +474,15 @@ fn seleccionar_proyecto() -> PathBuf {
 
 // --- MAIN ---
 
-/// Punto de entrada principal de Sentinel.
+/// Punto de entrada principal de Sentinel v3.2.
 ///
 /// # Flujo de ejecución
 ///
 /// 1. Solicita al usuario seleccionar un proyecto
 /// 2. Configura el watcher en el directorio `src/` del proyecto
-/// 3. Inicia un hilo para detectar comando de pausa ('p')
+/// 3. Inicia un hilo para detectar comandos de teclado:
+///    - 'p' → Pausa/Reanuda el monitoreo
+///    - 'r' → Genera reporte diario de productividad
 /// 4. Monitorea cambios en archivos .ts (excepto .spec.ts y .suggested)
 /// 5. Para cada cambio detectado:
 ///    - Analiza arquitectura con Claude
@@ -388,59 +493,91 @@ fn seleccionar_proyecto() -> PathBuf {
 ///      * Pregunta si hacer commit
 ///    - Si tests fallan, ofrece diagnóstico de Claude
 ///
+/// # Comandos interactivos
+///
+/// - **'p'** → Pausar/reanudar el monitoreo de archivos
+/// - **'r'** → Generar reporte diario basado en commits del día
+///
 /// # Mecanismos de pausa
 ///
 /// - Archivo `.sentinel-pause` en el directorio del proyecto
 /// - Comando 'p' en stdin (pausa/reanuda)
 ///
+/// # Arquitectura interna
+///
+/// Utiliza Arc<Mutex<T>> para compartir estado entre hilos:
+/// - `esta_pausado`: Bandera de pausa compartida entre hilo de teclado y loop principal
+/// - `pause_file`: Ruta del archivo de pausa compartida entre hilos
+/// - Channel (tx/rx): Comunicación entre watcher y loop principal
+///
 /// # Panics
 ///
 /// - Si faltan variables de entorno `ANTHROPIC_AUTH_TOKEN` o `ANTHROPIC_BASE_URL`
 /// - Si el directorio `src/` no existe en el proyecto seleccionado
+/// - Si git no está instalado o el proyecto no es un repositorio git válido
 fn main() {
+    // 1. Selección y rutas (PathBuf es nuestro mejor amigo)
     let project_path = seleccionar_proyecto();
     let path_to_watch = project_path.join("src");
-    let pause_file = project_path.join(".sentinel-pause");
+    // Usamos Arc para que el hilo y el loop compartan la ruta del archivo de pausa
+    let pause_file = Arc::new(project_path.join(".sentinel-pause"));
 
-    let paused = Arc::new(Mutex::new(false));
-    let paused_control = Arc::clone(&paused);
+    // 2. Control de Pausa Compartida
+    let esta_pausado = Arc::new(Mutex::new(false));
+    let pausa_hilo = Arc::clone(&esta_pausado);
+    let pausa_loop = Arc::clone(&esta_pausado);
+    
+    // 3. Clones para los hilos (Rust requiere copias explícitas)
+    let project_path_hilo = project_path.clone();
+    let pause_file_hilo = Arc::clone(&pause_file);
 
+    // 4. EL CANAL (Debe estar aquí afuera para que 'rx' sea visible en el loop)
+    let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
+
+    // Hilo de Teclado (Pausa 'P' y Reporte 'R')
     thread::spawn(move || {
         loop {
             let mut input = String::new();
             if io::stdin().read_line(&mut input).is_ok() {
-                if input.trim().to_lowercase() == "p" {
-                    let mut p = paused_control.lock().unwrap();
+                let cmd = input.trim().to_lowercase();
+                if cmd == "p" {
+                    let mut p = pausa_hilo.lock().unwrap();
                     *p = !*p;
                     println!(" ⌨️  SENTINEL: {}", if *p { "PAUSADO".yellow() } else { "ACTIVO".green() });
+                } else if cmd == "r" {
+                    generar_reporte_diario(&project_path_hilo);
                 }
             }
         }
     });
 
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = notify::recommended_watcher(move |res| {
-        if let Ok(Event { kind: EventKind::Modify(_), paths, .. }) = res {
-            for path in paths {
-                if path.extension().map_or(false, |e| e == "ts") && 
-                   !path.to_str().unwrap().contains(".spec.ts") &&
-                   !path.to_str().unwrap().contains(".suggested") {
-                    let _ = tx.send(path);
+    // 5. El Watcher
+    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+        if let Ok(event) = res {
+            if let EventKind::Modify(_) = event.kind {
+                for path in event.paths {
+                    if path.extension().map_or(false, |ext| ext == "ts") && 
+                       !path.to_str().unwrap().contains(".spec.ts") &&
+                       !path.to_str().unwrap().contains(".suggested") {
+                        let _ = tx.send(path); // Enviamos PathBuf por el canal
+                    }
                 }
             }
         }
     }).unwrap();
 
     watcher.watch(&path_to_watch, RecursiveMode::Recursive).unwrap();
-    println!("\n{} {}", "🛡️  Sentinel v3.0 activo en:".green(), project_path.display());
+    println!("\n{} {}", "🛡️  Sentinel v3.2 activo en:".green(), project_path.display());
 
+    // 6. EL LOOP PRINCIPAL (Ahora 'rx' sí existe aquí)
     for changed_path in rx {
-        if pause_file.exists() || *paused.lock().unwrap() {
-            println!("{}", "🛡️  Sentinel pausado.".yellow().italic());
+        // Verificamos pausa (Archivo físico o Tecla P)
+        if pause_file_hilo.exists() || *pausa_loop.lock().unwrap() {
             continue;
         }
 
-        let file_name = changed_path.file_name().unwrap().to_str().unwrap();
+        // Rust ahora sabe que changed_path es un PathBuf
+        let file_name = changed_path.file_name().unwrap().to_str().unwrap().to_string();
         let base_name = file_name.split('.').next().unwrap();
         let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
         
@@ -450,42 +587,30 @@ fn main() {
         }
 
         println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(250));
 
         if let Ok(codigo) = fs::read_to_string(&changed_path) {
             if codigo.trim().is_empty() { continue; }
 
-            match analizar_arquitectura(&codigo, file_name) {
+            match analizar_arquitectura(&codigo, &file_name) {
                 Ok(true) => {
                     println!("{}", "   ✅ Arquitectura aprobada.".green());
                     
                     match ejecutar_tests(&test_rel_path, &project_path) {
                         Ok(_) => {
                             println!("{}", "   ✅ Tests pasados con éxito".green().bold());
-                            // Actualizamos la documentación técnica
-                            if let Err(e) = actualizar_documentacion(&codigo, &changed_path) {
-                                println!("      ⚠️  Error al generar doc: {}", e);
-                            }
-                            let mensaje_ia = generar_mensaje_commit(&codigo, file_name);
+                            let _ = actualizar_documentacion(&codigo, &changed_path);
+                            let mensaje_ia = generar_mensaje_commit(&codigo, &file_name);
                             preguntar_commit(&project_path, &mensaje_ia);
                         },
-                        Err(error_mensaje) => {
+                        Err(err_msg) => {
                             println!("{}", "   ❌ Tests fallaron".red().bold());
-                            print!("\n🔍 ¿Quieres que Claude analice el error? (s/n, timeout 15s): ");
+                            print!("\n🔍 ¿Analizar error con IA? (s/n): ");
                             io::stdout().flush().unwrap();
-                            
-                            let (tx_h, rx_h) = std::sync::mpsc::channel();
-                            thread::spawn(move || {
-                                let mut res = String::new();
-                                if io::stdin().read_line(&mut res).is_ok() {
-                                    let _ = tx_h.send(res.trim().to_lowercase());
-                                }
-                            });
-
-                            if let Ok(resp) = rx_h.recv_timeout(Duration::from_secs(15)) {
-                                if resp == "s" {
-                                    let _ = pedir_ayuda_test(&codigo, &error_mensaje);
-                                }
+                            let mut res = String::new();
+                            io::stdin().read_line(&mut res).ok();
+                            if res.trim().to_lowercase() == "s" {
+                                let _ = pedir_ayuda_test(&codigo, &err_msg);
                             }
                         }
                     }

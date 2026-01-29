@@ -20,6 +20,7 @@ Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de cód
 - ✨ **Mensajes de commit inteligentes** siguiendo Conventional Commits
 - 🔧 **Diagnóstico automático de fallos en tests**
 - 📚 **Auto-documentación técnica** - genera archivos .md junto a cada .ts con "manual de bolsillo" generado por IA
+- 📊 **Reportes diarios de productividad** - genera resúmenes inteligentes de los commits del día (comando 'r')
 
 ## Requisitos
 
@@ -112,7 +113,9 @@ Para cada archivo `src/module/file.ts`, debe existir `test/module/file.spec.ts`.
 
 ### Controles interactivos
 
-#### Pausar/Reanudar
+Sentinel v3.2 incluye comandos de teclado para control en tiempo real:
+
+#### Pausar/Reanudar (comando 'p')
 
 Método 1: Presiona `p` en la terminal:
 ```
@@ -125,6 +128,39 @@ Método 2: Crea el archivo `.sentinel-pause` en el directorio del proyecto:
 touch .sentinel-pause  # Pausar
 rm .sentinel-pause     # Reanudar
 ```
+
+#### Generar reporte diario (comando 'r')
+
+Presiona `r` en la terminal para generar un reporte de productividad del día:
+
+```
+📊 Generando reporte de productividad diaria...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 REPORTE DIARIO DE SENTINEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ Logros Principales
+- Implementación completa de autenticación JWT
+- Migración de base de datos a PostgreSQL 15
+
+🛠️ Aspectos Técnicos
+- Integración con NestJS Guards para protección de rutas
+- Refactorización de servicios aplicando patrón Repository
+
+🚀 Próximos Pasos
+- Testing de endpoints de autenticación
+- Documentación de API con Swagger
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   ✅ Documento generado: docs/DAILY_REPORT.md
+```
+
+**Notas:**
+- El reporte analiza todos los commits realizados desde las 00:00:00 del día actual
+- Se guarda automáticamente en `docs/DAILY_REPORT.md`
+- Si no hay commits del día, muestra advertencia y no genera reporte
 
 #### Hacer commit
 
@@ -183,14 +219,51 @@ CRITICO - Violación del principio de responsabilidad única (SRP)...
 🧪 Ejecutando Jest para: test/auth/auth.spec.ts
    ❌ Tests fallaron
 
-🔍 ¿Quieres que Claude analice el error? (s/n, timeout 15s): s
+🔍 ¿Analizar error con IA? (s/n): s
 
 🔍 Analizando fallo en tests...
 💡 SOLUCIÓN SUGERIDA:
 El problema está en que el método `validateUser` no está manejando...
 ```
 
+### Ejemplo 4: Reporte diario de productividad
+
+```
+🛡️  Sentinel v3.2 activo en: C:\projects\mi-api-nestjs
+
+[... trabajas durante el día, haciendo varios commits ...]
+
+r  ← [Usuario presiona 'r']
+
+📊 Generando reporte de productividad diaria...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 REPORTE DIARIO DE SENTINEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ Logros Principales
+- Sistema de autenticación JWT completamente implementado
+- Integración de base de datos PostgreSQL finalizada
+- Módulo de usuarios con operaciones CRUD operativo
+
+🛠️ Aspectos Técnicos
+- Implementación de Guards de NestJS para protección de rutas
+- Configuración de TypeORM con migraciones automáticas
+- Aplicación de patrón Repository en servicios
+- Validación de DTOs con class-validator
+
+🚀 Próximos Pasos
+- Implementar tests E2E para flujo de autenticación
+- Añadir documentación Swagger a los endpoints
+- Configurar rate limiting para prevenir abusos
+- Implementar sistema de refresh tokens
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
 ## Arquitectura
+
+### Flujo principal (monitoreo de archivos)
 
 ```
 ┌─────────────────┐
@@ -218,6 +291,28 @@ El problema está en que el método `validateUser` no está manejando...
 └─────────────────┘
 ```
 
+### Comandos interactivos (hilo de teclado)
+
+```
+┌─────────────────┐
+│  Usuario (stdin)│
+└────────┬────────┘
+         │
+         ├─ 'p' ──▶ Pausar/Reanudar
+         │
+         └─ 'r' ──▶ ┌────────────────────┐
+                    │ Reporte Diario     │
+                    │ (generar_reporte_  │
+                    │  diario)           │
+                    └────────┬───────────┘
+                             │
+                             ├─▶ git log --since=00:00:00
+                             │
+                             ├─▶ Claude AI (análisis)
+                             │
+                             └─▶ docs/DAILY_REPORT.md
+```
+
 ### Componentes principales
 
 | Componente | Descripción |
@@ -229,6 +324,8 @@ El problema está en que el método `validateUser` no está manejando...
 | `actualizar_documentacion()` | Genera "manual de bolsillo" .md junto a cada archivo .ts |
 | `generar_mensaje_commit()` | Generación de mensajes siguiendo Conventional Commits |
 | `preguntar_commit()` | Flujo interactivo de commits con timeout |
+| `obtener_resumen_git()` | Obtiene commits del día usando git log |
+| `generar_reporte_diario()` | Crea reporte de productividad con IA basado en commits |
 
 ## Archivos generados
 
@@ -278,6 +375,43 @@ aplicando validaciones y transformaciones necesarias.
 
 Esta documentación se actualiza automáticamente cada vez que el archivo pasa las pruebas.
 
+### `docs/DAILY_REPORT.md`
+
+Cuando presionas **'r'** en la consola, Sentinel genera un reporte de productividad diario analizando todos los commits realizados desde las 00:00:00. El reporte usa Claude AI para:
+
+- Resumir logros principales del día
+- Identificar aspectos técnicos relevantes (NestJS, Rust, etc.)
+- Sugerir próximos pasos basándose en el progreso
+
+**Ubicación:** `docs/DAILY_REPORT.md`
+
+**Contenido:**
+
+```markdown
+✨ Logros Principales
+- Sistema de autenticación JWT completamente funcional
+- Migración de MongoDB a PostgreSQL finalizada
+- Implementación de caché con Redis
+
+🛠️ Aspectos Técnicos
+- Integración de Passport.js con estrategias JWT y Local
+- Implementación de Guards personalizados en NestJS
+- Configuración de TypeORM con migrations
+- Optimización de queries con índices compuestos
+
+🚀 Próximos Pasos
+- Añadir tests de integración para endpoints de autenticación
+- Documentar API con Swagger/OpenAPI
+- Implementar refresh tokens para mejorar seguridad
+- Configurar CI/CD con GitHub Actions
+```
+
+**Uso recomendado:**
+- Ejecutar al final del día de trabajo (comando 'r')
+- Compartir con el equipo en stand-ups
+- Usar como base para reportes semanales
+- Mantener registro histórico del progreso del proyecto
+
 ## Troubleshooting
 
 ### Error: "Falta ANTHROPIC_AUTH_TOKEN"
@@ -301,7 +435,7 @@ curl -I https://api.anthropic.com
 
 - Verifica que estás modificando archivos `.ts` en el directorio `src/`
 - Archivos `.spec.ts` y `.suggested` son ignorados intencionalmente
-- Revisa que el watcher esté activo (no pausado)
+- Revisa que el watcher esté activo (no pausado con 'p' o `.sentinel-pause`)
 
 ### Tests no se ejecutan
 
@@ -314,6 +448,13 @@ curl -I https://api.anthropic.com
 - Verifica que tienes git inicializado en el proyecto
 - Asegúrate de tener permisos de escritura
 - Revisa que no haya hooks de git bloqueando el commit
+
+### No se genera reporte diario (comando 'r')
+
+- Asegúrate de tener commits realizados en el día actual (desde las 00:00:00)
+- Verifica que git está instalado: `git --version`
+- Confirma que estás en un repositorio git válido: `git status`
+- Si el error persiste, revisa que `ANTHROPIC_AUTH_TOKEN` esté configurado correctamente
 
 ## Dependencias
 
@@ -328,12 +469,16 @@ curl -I https://api.anthropic.com
 
 ## Roadmap
 
+- [x] Reportes diarios de productividad (v3.2)
+- [x] Auto-documentación de archivos (v3.1)
 - [ ] Soporte para otros frameworks (Angular, React, Vue)
 - [ ] Configuración personalizable mediante archivo `.sentinelrc`
 - [ ] Integración con otros runners de tests (Vitest, Mocha)
-- [ ] Métricas y reportes de análisis de código
+- [ ] Métricas y reportes semanales/mensuales
 - [ ] Modo daemon/servicio en segundo plano
 - [ ] Soporte para múltiples proyectos simultáneos
+- [ ] Integración con webhooks (Slack, Discord, Teams)
+- [ ] Dashboard web para visualización de métricas
 
 ## Contribuir
 

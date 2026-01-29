@@ -19,6 +19,7 @@ Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de cód
 - ⏸️ **Mecanismo de pausa** mediante archivo `.sentinel-pause` o comando 'p'
 - ✨ **Mensajes de commit inteligentes** siguiendo Conventional Commits
 - 🔧 **Diagnóstico automático de fallos en tests**
+- 📚 **Auto-documentación técnica** - genera archivos .md junto a cada .ts con "manual de bolsillo" generado por IA
 
 ## Requisitos
 
@@ -207,6 +208,11 @@ El problema está en que el método `validateUser` no está manejando...
 └────────┬────────┘
          │ Tests pasan
          ▼
+┌──────────────────────┐
+│ Auto-Documentación   │ (actualizar_documentacion)
+│ Genera archivo .md   │
+└────────┬─────────────┘
+         ▼
 ┌─────────────────┐
 │  Git Commit     │ (preguntar_commit)
 └─────────────────┘
@@ -220,6 +226,7 @@ El problema está en que el método `validateUser` no está manejando...
 | `analizar_arquitectura()` | Evaluación de código basada en SOLID y Clean Code |
 | `ejecutar_tests()` | Ejecución de tests de Jest relacionados |
 | `pedir_ayuda_test()` | Diagnóstico de fallos con IA |
+| `actualizar_documentacion()` | Genera "manual de bolsillo" .md junto a cada archivo .ts |
 | `generar_mensaje_commit()` | Generación de mensajes siguiendo Conventional Commits |
 | `preguntar_commit()` | Flujo interactivo de commits con timeout |
 
@@ -234,6 +241,42 @@ users.service.ts.suggested
 ```
 
 Este archivo contiene el código refactorizado siguiendo las recomendaciones de Claude.
+
+### Archivos `.md` (Manuales de bolsillo)
+
+Cuando los tests pasan exitosamente, Sentinel genera automáticamente un "manual de bolsillo" en formato Markdown para cada archivo modificado. El archivo .md se crea en el mismo directorio que el .ts original.
+
+**Ubicación:** `src/users/users.service.ts` → `src/users/users.service.md`
+
+**Contenido:**
+- Resumen ultra-conciso (máximo 150 palabras)
+- Descripción de funcionalidad principal
+- Lista de métodos importantes
+- Timestamp de última actualización
+
+**Ejemplo:**
+
+```markdown
+# 📖 Documentación: users.service.ts
+
+> ✨ Actualizado automáticamente por Sentinel v3.1
+
+🎯 **Funcionalidad**: Gestiona operaciones CRUD de usuarios en el sistema. Implementa
+la lógica de negocio para creación, lectura, actualización y eliminación de usuarios,
+aplicando validaciones y transformaciones necesarias.
+
+🔧 **Métodos principales**:
+- `findAll()` - Lista usuarios con paginación y filtros
+- `findOne(id)` - Busca usuario por ID
+- `create(dto)` - Crea nuevo usuario validando datos
+- `update(id, dto)` - Actualiza usuario existente
+- `remove(id)` - Eliminación lógica de usuario
+
+---
+*Último refactor: SystemTime { tv_sec: 1706198400, tv_nsec: 0 }*
+```
+
+Esta documentación se actualiza automáticamente cada vez que el archivo pasa las pruebas.
 
 ## Troubleshooting
 

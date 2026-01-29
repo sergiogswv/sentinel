@@ -251,6 +251,70 @@ fn preguntar_commit(project_path: &Path, mensaje: &str) {
     }
 }
 
+/// Genera un "manual de bolsillo" automático para cada archivo modificado.
+///
+/// Crea documentación técnica ultra-concisa (máximo 150 palabras) en formato Markdown
+/// usando Claude AI. El archivo .md se genera en el mismo directorio que el archivo .ts
+/// con el mismo nombre pero extensión .md.
+///
+/// # Argumentos
+///
+/// * `codigo` - Código fuente del archivo modificado
+/// * `file_path` - Ruta completa al archivo .ts modificado
+///
+/// # Retorna
+///
+/// * `Ok(())` - Documentación generada exitosamente
+/// * `Err` - Error al comunicarse con la IA o al escribir el archivo
+///
+/// # Efectos secundarios
+///
+/// Crea/sobrescribe un archivo .md en la misma ubicación que el .ts original.
+/// Por ejemplo: `src/users/users.service.ts` → `src/users/users.service.md`
+///
+/// # Formato de salida
+///
+/// ```markdown
+/// # 📖 Documentación: users.service.ts
+///
+/// > ✨ Actualizado automáticamente por Sentinel v3.1
+///
+/// 🎯 **Funcionalidad**: Gestiona operaciones CRUD de usuarios...
+/// 🔧 **Métodos principales**: findAll(), create(), update()...
+///
+/// ---
+/// *Último refactor: SystemTime { ... }*
+/// ```
+fn actualizar_documentacion(codigo: &str, file_path: &Path) -> anyhow::Result<()> {
+    let file_name = file_path.file_name().unwrap().to_str().unwrap();
+    println!("📚 Actualizando manual de bolsillo para: {}", file_name.magenta());
+
+    let prompt = format!(
+        "Como documentador técnico de NestJS, analiza este código: {}. \
+        Genera un resumen técnico ultra-conciso (máximo 150 palabras) en Markdown. \
+        Enfócate en: ¿Qué hace este servicio? y ¿Cuáles son sus métodos principales? \
+        Usa emojis para las secciones. No uses introducciones innecesarias.\n\n{}",
+        file_name, codigo
+    );
+
+    let resumen = consultar_claude(prompt)?;
+
+    // Cambiamos la extensión de .ts a .md en la misma carpeta
+    let mut docs_path = file_path.to_path_buf();
+    docs_path.set_extension("md");
+
+    let nueva_doc = format!(
+        "# 📖 Documentación: {}\n\n> ✨ Actualizado automáticamente por Sentinel v3.1\n\n{}\n\n---\n*Último refactor: {:?}*",
+        file_name,
+        resumen,
+        std::time::SystemTime::now()
+    );
+
+    fs::write(&docs_path, nueva_doc)?;
+    println!("   ✅ Documento generado: {}", docs_path.display());
+    Ok(())
+}
+
 /// Extrae bloques de código TypeScript de una respuesta de Claude.
 ///
 /// Busca y extrae el contenido entre delimitadores \`\`\`typescript...\`\`\`.
@@ -318,7 +382,10 @@ fn seleccionar_proyecto() -> PathBuf {
 /// 5. Para cada cambio detectado:
 ///    - Analiza arquitectura con Claude
 ///    - Si pasa, ejecuta tests con Jest
-///    - Si tests pasan, ofrece hacer commit
+///    - Si tests pasan:
+///      * Genera documentación automática (.md)
+///      * Genera mensaje de commit inteligente
+///      * Pregunta si hacer commit
 ///    - Si tests fallan, ofrece diagnóstico de Claude
 ///
 /// # Mecanismos de pausa
@@ -395,6 +462,10 @@ fn main() {
                     match ejecutar_tests(&test_rel_path, &project_path) {
                         Ok(_) => {
                             println!("{}", "   ✅ Tests pasados con éxito".green().bold());
+                            // Actualizamos la documentación técnica
+                            if let Err(e) = actualizar_documentacion(&codigo, &changed_path) {
+                                println!("      ⚠️  Error al generar doc: {}", e);
+                            }
                             let mensaje_ia = generar_mensaje_commit(&codigo, file_name);
                             preguntar_commit(&project_path, &mensaje_ia);
                         },

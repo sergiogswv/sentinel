@@ -1,136 +1,268 @@
-use notify::{Watcher, RecursiveMode, Event, EventKind};
-use std::process::Command;
-use std::path::Path;
-use std::fs;
-use std::io::{self, Write}; // Para forzar el vaciado de la terminal
+//! # Sentinel - AI-Powered Code Monitor
+//!
+//! Herramienta de monitoreo en tiempo real que vigila cambios en archivos TypeScript,
+//! analiza el código con Claude AI, ejecuta tests y gestiona commits automáticamente.
+//!
+//! ## Arquitectura
+//!
+//! ```text
+//! ┌─────────────────┐
+//! │  File Watcher   │ (notify crate)
+//! └────────┬────────┘
+//!          │ Detecta cambio en .ts
+//!          ▼
+//! ┌─────────────────┐
+//! │ Análisis Claude │ (consultar_claude)
+//! └────────┬────────┘
+//!          │ Código aprobado
+//!          ▼
+//! ┌─────────────────┐
+//! │  Jest Tests     │ (ejecutar_tests)
+//! └────────┬────────┘
+//!          │ Tests pasan
+//!          ▼
+//! ┌─────────────────┐
+//! │  Git Commit     │ (preguntar_commit)
+//! └─────────────────┘
+//! ```
+
+use colored::*;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use reqwest::blocking::Client;
 use serde_json::json;
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use colored::*;
 
-fn analizar_con_claude(codigo: &str, file_name: &str) -> anyhow::Result<bool> {
-    let api_key = std::env::var("ANTHROPIC_AUTH_TOKEN").expect("❌ No se encontró la variable ANTHROPIC_AUTH_TOKEN");
-    let base_url = std::env::var("ANTHROPIC_BASE_URL").expect("❌ No se encontró la variable ANTHROPIC_BASE_URL");
+// --- NÚCLEO DE COMUNICACIÓN (DRY) ---
 
-    let client = Client::new();
+/// Realiza una consulta al API de Claude AI (Anthropic).
+///
+/// # Argumentos
+///
+/// * `prompt` - El prompt a enviar a Claude, generalmente código + instrucciones
+///
+/// # Variables de entorno requeridas
+///
+/// * `ANTHROPIC_AUTH_TOKEN` - API key de Anthropic
+/// * `ANTHROPIC_BASE_URL` - URL base de la API (ej: https://api.anthropic.com)
+///
+/// # Retorna
+///
+/// * `Ok(String)` - Respuesta de texto generada por Claude
+/// * `Err` - Error de red, autenticación o respuesta malformada
+///
+/// # Ejemplo
+///
+/// ```no_run
+/// let respuesta = consultar_claude("Analiza este código: fn main() {}".to_string())?;
+/// println!("Claude dice: {}", respuesta);
+/// ```
+fn consultar_claude(prompt: String) -> anyhow::Result<String> {
+    let api_key = std::env::var("ANTHROPIC_AUTH_TOKEN").expect("❌ Falta ANTHROPIC_AUTH_TOKEN");
+    let base_url = std::env::var("ANTHROPIC_BASE_URL").expect("❌ Falta ANTHROPIC_BASE_URL");
     let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
 
-    io::stdout().flush()?;
-
+    let client = Client::new();
     let response = client.post(&url)
         .header("x-api-key", api_key)
         .header("content-type", "application/json")
         .json(&json!({
             "model": "claude-opus-4-5-20251101",
-            "max_tokens": 1024,
-            "messages": [{
-                "role": "user", 
-                "content": format!(
-                    "Actúa como un Arquitecto de Software experto en NestJS y Clean Code. 
-                    Analiza el archivo {}.
-                    
-                    Tu análisis debe enfocarse en:
-                    1. SOLID: ¿Se está rompiendo el Principio de Responsabilidad Única (SRP)?
-                    2. CLEAN CODE: ¿Hay funciones muy largas, nombres poco claros o 'magic numbers'?
-                    3. NESTJS BEST PRACTICES: ¿El servicio está demasiado acoplado o faltan DTOs?
-
-                    REGLAS DE RESPUESTA:
-                    - Si hay un bug que romperá la app o una violación de SOLID grave, inicia con 'CRITICO'.
-                    - Si el código es funcional pero puede mejorar en legibilidad, inicia con 'SEGURO' pero añade sugerencias.
-                    - Sé breve, usa puntos (bullet points) y ve al grano.
-
-                    Código:\n{}", 
-                    file_name, codigo
-                )
-            }]
+            "max_tokens": 1500,
+            "messages": [{"role": "user", "content": prompt}]
         }))
         .send()?;
 
     let body: serde_json::Value = response.json()?;
+    let texto = body["content"][0]["text"].as_str()
+        .ok_or_else(|| anyhow::anyhow!("Respuesta vacía de la IA"))?;
     
-    // Si la API de Claude devuelve un error (ej: saldo insuficiente), saldrá aquí
-    if let Some(text) = body["content"][0]["text"].as_str() {
-        println!("\n✨ CONSEJO DE CLAUDE:\n{}", text);
-
-        let sugerencia = extraer_codigo(text);
-        let path_sugerido = format!("{}.suggested", file_name);
-        fs::write(&path_sugerido, sugerencia)?;
-        println!("\n✨ SUGERENCIA GUARDADA EN: {}", path_sugerido);
-
-        if text.trim().to_uppercase().starts_with("CRITICO") {
-            println!("   ❌ CRITICO: {}", text);
-            return Ok(false);
-        }
-    }
-
-    Ok(true)
+    Ok(texto.to_string())
 }
 
-fn ejecutar_tests(test_path: &str, project_path: &str) -> bool {
-    println!("\n🧪 Ejecutando Jest para: {}", test_path);
+// --- FUNCIONES DE ANÁLISIS ---
 
-    let args = [
-        "run",
-        "test",
-        "--",
-        "--findRelatedTests",
-        test_path,
-    ];
+/// Analiza código TypeScript/NestJS con Claude AI enfocándose en arquitectura y buenas prácticas.
+///
+/// Evalúa principios SOLID, Clean Code y patrones de NestJS. Si encuentra problemas críticos,
+/// Claude responderá comenzando con "CRITICO", de lo contrario con "SEGURO".
+///
+/// # Argumentos
+///
+/// * `codigo` - Código fuente a analizar
+/// * `file_name` - Nombre del archivo (para contexto en el prompt)
+///
+/// # Retorna
+///
+/// * `Ok(true)` - Código aprobado (sin problemas críticos)
+/// * `Ok(false)` - Código rechazado (problemas críticos detectados)
+/// * `Err` - Error de comunicación con la IA
+///
+/// # Efectos secundarios
+///
+/// Crea un archivo `{file_name}.suggested` con la versión mejorada del código.
+fn analizar_arquitectura(codigo: &str, file_name: &str) -> anyhow::Result<bool> {
+    let prompt = format!(
+        "Actúa como un Arquitecto de Software experto en NestJS y Clean Code. Analiza {}.\n\
+        Enfócate en SOLID, Clean Code y NestJS Best Practices.\n\
+        REGLAS: Inicia con 'CRITICO' si hay fallos graves, o 'SEGURO' si está bien.\n\
+        Incluye una versión mejorada en bloque ```typescript.\n\nCódigo:\n{}", 
+        file_name, codigo
+    );
 
-    match Command::new("npm")
-        .args(&args)
+    let respuesta = consultar_claude(prompt)?;
+    println!("\n✨ CONSEJO DE CLAUDE:\n{}", respuesta);
+
+    let sugerencia = extraer_codigo(&respuesta);
+    fs::write(format!("{}.suggested", file_name), sugerencia)?;
+
+    Ok(!respuesta.trim().to_uppercase().starts_with("CRITICO"))
+}
+
+/// Solicita ayuda a Claude AI cuando fallan los tests de Jest.
+///
+/// Envía el código y el error de Jest a Claude para obtener un diagnóstico
+/// y sugerencia de solución.
+///
+/// # Argumentos
+///
+/// * `codigo` - Código fuente que causó el fallo
+/// * `error_jest` - Salida de error completa de Jest (stdout + stderr)
+fn pedir_ayuda_test(codigo: &str, error_jest: &str) -> anyhow::Result<()> {
+    println!("{}", "🔍 Analizando fallo en tests...".magenta());
+    let prompt = format!(
+        "Los tests de NestJS fallaron.\nERROR DE JEST:\n{}\n\nCÓDIGO:\n{}\nExplica el fallo y dame el fix breve.",
+        error_jest, codigo
+    );
+
+    let respuesta = consultar_claude(prompt)?;
+    println!("\n💡 SOLUCIÓN SUGERIDA:\n{}", respuesta.yellow());
+    Ok(())
+}
+
+/// Genera un mensaje de commit automático siguiendo Conventional Commits.
+///
+/// Analiza los cambios en el código y genera un mensaje descriptivo y conciso
+/// (máximo 50 caracteres) siguiendo el formato: `tipo: descripción`.
+///
+/// # Argumentos
+///
+/// * `codigo` - Código fuente modificado
+/// * `file_name` - Nombre del archivo modificado
+///
+/// # Retorna
+///
+/// Mensaje de commit generado, o un fallback genérico si Claude falla.
+///
+/// # Ejemplo de salida
+///
+/// ```text
+/// feat: add user authentication service
+/// fix: resolve null pointer in validator
+/// refactor: simplify error handling logic
+/// ```
+fn generar_mensaje_commit(codigo: &str, file_name: &str) -> String {
+    println!("{}", "📝 Generando mensaje de commit inteligente...".magenta());
+    let prompt = format!(
+        "Genera un mensaje de commit corto (máximo 50 caracteres) siguiendo 'Conventional Commits' para los cambios en {}. Solo devuelve el texto del mensaje.\n\nCódigo:\n{}", 
+        file_name, codigo
+    );
+
+    match consultar_claude(prompt) {
+        Ok(msg) => msg.trim().replace('"', ""),
+        Err(_) => format!("feat: update {}", file_name)
+    }
+}
+
+// --- UTILIDADES ---
+
+/// Ejecuta los tests de Jest relacionados con un archivo específico.
+///
+/// Utiliza `npm run test -- --findRelatedTests` para ejecutar solo los tests
+/// que están vinculados al archivo modificado.
+///
+/// # Argumentos
+///
+/// * `test_path` - Ruta relativa del archivo de test (ej: "test/users/users.spec.ts")
+/// * `project_path` - Ruta absoluta del directorio del proyecto NestJS
+///
+/// # Retorna
+///
+/// * `Ok(())` - Tests pasaron exitosamente
+/// * `Err(String)` - Tests fallaron, con salida de error completa
+fn ejecutar_tests(test_path: &str, project_path: &Path) -> Result<(), String> {
+    println!("\n🧪 Ejecutando Jest para: {}", test_path.cyan());
+    let output = Command::new("npm")
+        .args(["run", "test", "--", "--findRelatedTests", test_path])
         .current_dir(project_path)
-        .status()
-    {
-        Ok(status) => status.success(),
-        Err(_) => false,
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!("{}\n{}", 
+            String::from_utf8_lossy(&output.stdout), 
+            String::from_utf8_lossy(&output.stderr)))
     }
 }
 
-fn preguntar_commit(file_name: &str, project_path: &str) {
-    print!("\n📝 ¿Quieres hacer commit de {}? (s/n, timeout 30s): ", file_name);
+/// Pregunta interactivamente al usuario si desea crear un commit.
+///
+/// Muestra el mensaje generado y espera 30 segundos por confirmación.
+/// Si el usuario responde 's', ejecuta `git add .` seguido de `git commit`.
+///
+/// # Argumentos
+///
+/// * `project_path` - Ruta del proyecto donde ejecutar los comandos git
+/// * `mensaje` - Mensaje de commit propuesto
+///
+/// # Comportamiento
+///
+/// - Timeout de 30 segundos
+/// - Requiere respuesta 's' para confirmar (cualquier otra input se ignora)
+/// - Ejecuta git add y git commit de forma secuencial si se confirma
+fn preguntar_commit(project_path: &Path, mensaje: &str) {
+    println!("\n🚀 Mensaje sugerido: {}", mensaje.bright_cyan().bold());
+    print!("📝 ¿Quieres hacer commit? (s/n, timeout 30s): ");
     io::stdout().flush().unwrap();
 
     let (tx, rx) = std::sync::mpsc::channel();
-
     thread::spawn(move || {
         let mut respuesta = String::new();
         if io::stdin().read_line(&mut respuesta).is_ok() {
-            let _ = tx.send(respuesta.trim().to_string());
+            let _ = tx.send(respuesta.trim().to_lowercase());
         }
     });
 
-    // Esperar respuesta con timeout de 30s
-    let respuesta = rx.recv_timeout(Duration::from_secs(30));
-
-    if let Ok(r) = respuesta {
-        if r == "s" || r == "S" {
-            let commit_msg = format!("sentinel: {}", file_name);
-
-            println!("   📦 Ejecutando git add...");
-            let _ = Command::new("git")
-                .args(&["add", "."])
-                .current_dir(project_path)
-                .status();
-
-            println!("   💾 Ejecutando git commit...");
-            match Command::new("git")
-                .args(&["commit", "-m", &commit_msg])
-                .current_dir(project_path)
-                .status()
-            {
-                Ok(_) => println!("   ✅ Commit exitoso: {}", commit_msg),
-                Err(e) => println!("   ❌ Error en git commit: {}", e),
+    if let Ok(r) = rx.recv_timeout(Duration::from_secs(30)) {
+        if r == "s" {
+            Command::new("git").args(["add", "."]).current_dir(project_path).status().ok();
+            match Command::new("git").args(["commit", "-m", mensaje]).current_dir(project_path).status() {
+                Ok(_) => println!("   ✅ Commit exitoso!"),
+                Err(e) => println!("   ❌ Error: {}", e),
             }
-        } else {
-            println!("   ⏭️  Commit cancelado");
         }
-    } else {
-        println!("   ⏭️  Timeout - Commit cancelado");
     }
 }
 
+/// Extrae bloques de código TypeScript de una respuesta de Claude.
+///
+/// Busca y extrae el contenido entre delimitadores \`\`\`typescript...\`\`\`.
+/// Si no encuentra un bloque delimitado, devuelve el texto completo.
+///
+/// # Argumentos
+///
+/// * `texto` - Respuesta completa de Claude AI
+///
+/// # Retorna
+///
+/// Código TypeScript extraído (sin delimitadores) o el texto original.
 fn extraer_codigo(texto: &str) -> String {
     if let Some(start) = texto.find("```typescript") {
         let resto = &texto[start + 13..];
@@ -141,81 +273,155 @@ fn extraer_codigo(texto: &str) -> String {
     texto.to_string()
 }
 
+/// Presenta un menú interactivo para seleccionar un proyecto del directorio padre.
+///
+/// Escanea el directorio padre (`../`) y muestra todos los subdirectorios como
+/// opciones de proyectos. El usuario selecciona mediante un número.
+///
+/// # Retorna
+///
+/// PathBuf del proyecto seleccionado.
+///
+/// # Nota
+///
+/// Si el usuario ingresa un número inválido, por defecto selecciona el proyecto 1.
+fn seleccionar_proyecto() -> PathBuf {
+    println!("{}", "\n📂 Proyectos detectados:".bright_cyan().bold());
+    let entries = fs::read_dir("../").unwrap();
+    let proyectos: Vec<PathBuf> = entries.flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+
+    for (i, p) in proyectos.iter().enumerate() {
+        println!("{}. {}", i + 1, p.file_name().unwrap().to_str().unwrap());
+    }
+
+    print!("\n👉 Selecciona número: ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let idx = input.trim().parse::<usize>().unwrap_or(1) - 1;
+    proyectos[idx].clone()
+}
+
+// --- MAIN ---
+
+/// Punto de entrada principal de Sentinel.
+///
+/// # Flujo de ejecución
+///
+/// 1. Solicita al usuario seleccionar un proyecto
+/// 2. Configura el watcher en el directorio `src/` del proyecto
+/// 3. Inicia un hilo para detectar comando de pausa ('p')
+/// 4. Monitorea cambios en archivos .ts (excepto .spec.ts y .suggested)
+/// 5. Para cada cambio detectado:
+///    - Analiza arquitectura con Claude
+///    - Si pasa, ejecuta tests con Jest
+///    - Si tests pasan, ofrece hacer commit
+///    - Si tests fallan, ofrece diagnóstico de Claude
+///
+/// # Mecanismos de pausa
+///
+/// - Archivo `.sentinel-pause` en el directorio del proyecto
+/// - Comando 'p' en stdin (pausa/reanuda)
+///
+/// # Panics
+///
+/// - Si faltan variables de entorno `ANTHROPIC_AUTH_TOKEN` o `ANTHROPIC_BASE_URL`
+/// - Si el directorio `src/` no existe en el proyecto seleccionado
 fn main() {
-    let nest_project_path = "../../gestion-leads-operaciones-backend";
-    let path_to_watch = format!("{}/src", nest_project_path);
-    
+    let project_path = seleccionar_proyecto();
+    let path_to_watch = project_path.join("src");
+    let pause_file = project_path.join(".sentinel-pause");
+
+    let paused = Arc::new(Mutex::new(false));
+    let paused_control = Arc::clone(&paused);
+
+    thread::spawn(move || {
+        loop {
+            let mut input = String::new();
+            if io::stdin().read_line(&mut input).is_ok() {
+                if input.trim().to_lowercase() == "p" {
+                    let mut p = paused_control.lock().unwrap();
+                    *p = !*p;
+                    println!(" ⌨️  SENTINEL: {}", if *p { "PAUSADO".yellow() } else { "ACTIVO".green() });
+                }
+            }
+        }
+    });
+
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-        if let Ok(event) = res {
-            if let EventKind::Modify(_) = event.kind {
-                for path in event.paths {
-                    if path.extension().map_or(false, |ext| ext == "ts") && 
-                       !path.to_str().unwrap().contains(".spec.ts") &&
-                       !path.to_str().unwrap().contains(".suggested") {
-                        let _ = tx.send(path);
-                    }
+    let mut watcher = notify::recommended_watcher(move |res| {
+        if let Ok(Event { kind: EventKind::Modify(_), paths, .. }) = res {
+            for path in paths {
+                if path.extension().map_or(false, |e| e == "ts") && 
+                   !path.to_str().unwrap().contains(".spec.ts") &&
+                   !path.to_str().unwrap().contains(".suggested") {
+                    let _ = tx.send(path);
                 }
             }
         }
     }).unwrap();
 
-    watcher.watch(Path::new(&path_to_watch), RecursiveMode::Recursive).unwrap();
-    println!("🛡️  Sentinel v2.5 Online.");
-
-    let pause_file = format!("{}/.sentinel-pause", nest_project_path);
+    watcher.watch(&path_to_watch, RecursiveMode::Recursive).unwrap();
+    println!("\n{} {}", "🛡️  Sentinel v3.0 activo en:".green(), project_path.display());
 
     for changed_path in rx {
-        // Verificar si el sentinel está pausado
-        if Path::new(&pause_file).exists() {
+        if pause_file.exists() || *paused.lock().unwrap() {
+            println!("{}", "🛡️  Sentinel pausado.".yellow().italic());
             continue;
         }
 
         let file_name = changed_path.file_name().unwrap().to_str().unwrap();
-
-        // Solo procesar si existe el archivo de test correspondiente en test/
         let base_name = file_name.split('.').next().unwrap();
-        let test_file_name = file_name.replace(".ts", ".spec.ts");
-        let test_rel_path = format!("test/{}/{}", base_name, test_file_name);
-        let test_file = Path::new(nest_project_path).join(&test_rel_path);
-        if !test_file.exists() {
+        let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
+        
+        if !project_path.join(&test_rel_path).exists() {
             println!("\n⏭️  IGNORADO (sin test): {}", file_name);
             continue;
         }
 
-        println!("\n🔔 ARCHIVO DETECTADO: {}", file_name);
+        println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
+        thread::sleep(Duration::from_millis(200));
 
-        // pausa estrategica de 100ms para esperar al SO
-        thread::sleep(Duration::from_millis(100));
+        if let Ok(codigo) = fs::read_to_string(&changed_path) {
+            if codigo.trim().is_empty() { continue; }
 
-        // LEER ARCHIVO
-        match fs::read_to_string(&changed_path) {
-            Ok(codigo) => {
-                if !codigo.trim().is_empty() {
-                    match analizar_con_claude(&codigo, file_name) {
-                        Ok(true) => {
-                            println!("{}","   ✅ Todo bien, ejecutando tests...".green().bold());
-                            if ejecutar_tests(&test_rel_path, nest_project_path) {
-                                println!("{}","   ✅ Tests pasados".green().bold());
-                                preguntar_commit(file_name, nest_project_path);
-                            } else {
-                                println!("{}","   ❌ Tests fallaron".red().bold());
-                            }
+            match analizar_arquitectura(&codigo, file_name) {
+                Ok(true) => {
+                    println!("{}", "   ✅ Arquitectura aprobada.".green());
+                    
+                    match ejecutar_tests(&test_rel_path, &project_path) {
+                        Ok(_) => {
+                            println!("{}", "   ✅ Tests pasados con éxito".green().bold());
+                            let mensaje_ia = generar_mensaje_commit(&codigo, file_name);
+                            preguntar_commit(&project_path, &mensaje_ia);
                         },
-                        Ok(false) => println!("{}","   ❌ CRITICO".red().bold()),
-                        Err(e) => {
-                            println!("   ❌ Error leyendo archivo: {}", e);
-                            if ejecutar_tests(&test_rel_path, nest_project_path) {
-                                println!("{}","   ✅ Tests pasados".green().bold());
-                                preguntar_commit(file_name, nest_project_path);
-                            } else {
-                                println!("{}","   ❌ Tests fallaron".red().bold());
+                        Err(error_mensaje) => {
+                            println!("{}", "   ❌ Tests fallaron".red().bold());
+                            print!("\n🔍 ¿Quieres que Claude analice el error? (s/n, timeout 15s): ");
+                            io::stdout().flush().unwrap();
+                            
+                            let (tx_h, rx_h) = std::sync::mpsc::channel();
+                            thread::spawn(move || {
+                                let mut res = String::new();
+                                if io::stdin().read_line(&mut res).is_ok() {
+                                    let _ = tx_h.send(res.trim().to_lowercase());
+                                }
+                            });
+
+                            if let Ok(resp) = rx_h.recv_timeout(Duration::from_secs(15)) {
+                                if resp == "s" {
+                                    let _ = pedir_ayuda_test(&codigo, &error_mensaje);
+                                }
                             }
-                        },
+                        }
                     }
-                }
-            },
-            Err(e) => println!("   ❌ Error leyendo archivo: {}", e),
+                },
+                Ok(false) => println!("{}", "   ❌ CRITICO: Corrige SOLID/Bugs".red().bold()),
+                Err(e) => println!("   ⚠️  Error de IA: {}", e),
+            }
         }
     }
 }

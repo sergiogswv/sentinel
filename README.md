@@ -1,7 +1,7 @@
 # Sentinel
 
 <p align="center">
-  <strong>🛡️ Asistente de desarrollo impulsado por IA para proyectos NestJS/TypeScript</strong>
+  <strong>🛡️ Asistente de Productividad de Élite: Orquestador de IA para la Auditoría de Arquitectura, Testing Autónomo y Observabilidad de Desarrollo.</strong>
 </p>
 
 Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de código usando Claude AI y gestiona el flujo de trabajo con Git. Diseñada para integrarse con proyectos NestJS/TypeScript como asistente de desarrollo en tiempo real.
@@ -103,7 +103,7 @@ Sentinel espera que tu proyecto NestJS tenga la siguiente estructura:
 
 ```
 mi-proyecto/
-├── src/
+├── src/              ← OBLIGATORIO: Sentinel vigila este directorio
 │   └── users/
 │       └── users.service.ts
 └── test/
@@ -111,7 +111,10 @@ mi-proyecto/
         └── users.spec.ts
 ```
 
-Para cada archivo `src/module/file.ts`, debe existir `test/module/file.spec.ts`.
+**Requisitos importantes:**
+- El proyecto **DEBE** tener un directorio `src/` (Sentinel lo validará al iniciar)
+- Para cada archivo `src/module/file.ts`, debe existir `test/module/file.spec.ts`
+- Si el proyecto no tiene `src/`, Sentinel mostrará un error descriptivo y se detendrá
 
 ### Controles interactivos
 
@@ -445,6 +448,21 @@ Cuando presionas **'r'** en la consola, Sentinel genera un reporte de productivi
 
 ## Troubleshooting
 
+### Error: "Input watch path is neither a file nor a directory"
+
+Este error ocurre cuando:
+- El proyecto seleccionado **no tiene** un directorio `src/`
+- La ruta del proyecto no existe o no es válida
+
+**Solución:**
+1. Asegúrate de que el proyecto tenga una carpeta `src/`:
+   ```bash
+   mkdir src
+   ```
+2. O selecciona un proyecto diferente que ya tenga esta estructura
+
+Sentinel ahora valida automáticamente la existencia del directorio `src/` y muestra mensajes de error descriptivos.
+
 ### Error: "Falta ANTHROPIC_AUTH_TOKEN"
 
 Asegúrate de configurar las variables de entorno:
@@ -501,20 +519,117 @@ curl -I https://api.anthropic.com
 
 ## Roadmap
 
-- [x] Reportes diarios de productividad (v3.2)
-- [x] Auto-documentación de archivos (v3.1)
-- [x] Stdin centralizado sin conflictos entre hilos (v3.3)
-- [x] Tests de Jest visibles en consola en tiempo real (v3.3)
-- [x] Sugerencias de código solo en archivo .suggested, no en consola (v3.3)
-- [x] Debounce y drenado de eventos duplicados del watcher (v3.3)
-- [ ] Soporte para otros frameworks (Angular, React, Vue)
-- [ ] Configuración personalizable mediante archivo `.sentinelrc`
-- [ ] Integración con otros runners de tests (Vitest, Mocha)
-- [ ] Métricas y reportes semanales/mensuales
+### Fase 1: Fundamentos (Completada ✅)
+**Enfoque:** Monitoreo básico y análisis de código
+
+- [x] Monitoreo en tiempo real con file watcher (notify)
+- [x] Análisis de arquitectura con Claude AI (SOLID, Clean Code)
+- [x] Ejecución automática de tests con Jest
+- [x] Generación de mensajes de commit inteligentes
+- [x] Flujo interactivo de commits con Git
+
+### Fase 2: Productividad y Documentación (Completada ✅)
+**Enfoque:** Automatización de tareas repetitivas
+
+- [x] Auto-documentación de archivos (.md generados automáticamente) - v3.1
+- [x] Reportes diarios de productividad - v3.2
+- [x] Sugerencias de código en archivos `.suggested` - v3.3
+- [x] Diagnóstico automático de fallos en tests - v3.3
+
+### Fase 3: Optimización y Estabilidad (Completada ✅)
+**Enfoque:** Mejoras de rendimiento y UX
+
+- [x] Stdin centralizado sin conflictos entre hilos - v3.3
+- [x] Tests de Jest visibles en consola en tiempo real - v3.3
+- [x] Debounce y drenado de eventos duplicados del watcher - v3.3
+- [x] Validación de estructura de proyecto (directorio `src/`) - v3.3.1
+- [x] Manejo robusto de errores con mensajes descriptivos - v3.3.1
+- [x] Configuración personalizable mediante archivo `.sentinelrc.toml` - v3.3
+- [x] Sistema de estadísticas y métricas de productividad - v3.3
+
+### Fase 4: El Guardián de Seguridad (SecOps) 🔒
+**Enfoque:** Prevención de riesgos y blindaje de código
+
+- [ ] **Módulo de Escaneo de Secretos**
+  - Motor basado en Regex y entropía para detectar:
+    - Llaves de API (AWS, Google Cloud, Azure)
+    - Tokens JWT en texto plano
+    - Contraseñas hardcodeadas
+    - Credenciales de bases de datos
+  - Bloqueo automático de commits con secretos detectados
+  - Sugerencias de variables de entorno (.env)
+
+- [ ] **Auditoría de Dependencias**
+  - Lectura y análisis de `package-lock.json` / `Cargo.lock`
+  - Consulta de bases de datos de vulnerabilidades (CVEs)
+  - Integración con GitHub Security Advisories
+  - Alertas de dependencias obsoletas o inseguras
+  - Reporte de score de seguridad del proyecto
+
+- [ ] **Sanitización Automática**
+  - Prompt especializado para NestJS:
+    - Detección de DTOs sin decoradores de validación (`class-validator`)
+    - Validación de uso correcto de `ValidationPipe`
+    - Prevención de inyección SQL en queries de TypeORM
+    - Validación de sanitización de inputs en endpoints
+  - Sugerencias automáticas de validadores faltantes
+  - Análisis de vectores de ataque comunes (OWASP Top 10)
+
+### Fase 5: El Revisor de Élite (PR Mode) 🔍
+**Enfoque:** Colaboración y calidad colectiva
+
+- [ ] **Integración con GitHub API**
+  - Autenticación con tokens personales o GitHub Apps
+  - Descarga automática de archivos de Pull Requests
+  - Lectura de comentarios y conversaciones existentes
+  - Capacidad de publicar revisiones directamente en GitHub
+
+- [ ] **Análisis de Diff/Cambios**
+  - Parser de diffs de Git para extraer solo líneas modificadas
+  - Análisis contextual: la IA evalúa el cambio en relación al código existente
+  - Detección de breaking changes (APIs modificadas, firmas de funciones)
+  - Validación de que los cambios no rompen la lógica existente
+  - Análisis de impacto en otras partes del código
+
+- [ ] **Reporte de Revisión**
+  - Generación de resumen ejecutivo estructurado:
+    - ✅ **Aprobación:** "Este PR es seguro para mergear"
+    - ⚠️ **Advertencias:** "El servicio de facturación perdió cobertura de tests"
+    - ❌ **Bloqueos:** "Detectada vulnerabilidad de inyección SQL"
+  - Comentarios en línea sobre código específico
+  - Checklist automático de calidad (tests, docs, seguridad)
+  - Sugerencias de mejoras opcionales vs. cambios obligatorios
+  - Integración con sistemas de CI/CD para bloquear merges inseguros
+
+### Fase 6: Expansión Multiplataforma 🌐
+**Enfoque:** Compatibilidad con más tecnologías
+
+- [ ] Soporte para otros frameworks JavaScript:
+  - Angular (standalone components, signals)
+  - React (hooks, Context API)
+  - Vue 3 (Composition API)
+  - SolidJS, Svelte
+- [ ] Integración con otros test runners:
+  - Vitest
+  - Mocha + Chai
+  - Playwright (E2E)
+  - Cypress
+- [ ] Soporte para otros lenguajes:
+  - Python (pytest, Django, FastAPI)
+  - Go (testing package)
+  - Java (JUnit, Spring Boot)
+
+### Fase 7: Empresa y Escalabilidad 🚀
+**Enfoque:** Herramientas para equipos y organizaciones
+
 - [ ] Modo daemon/servicio en segundo plano
 - [ ] Soporte para múltiples proyectos simultáneos
-- [ ] Integración con webhooks (Slack, Discord, Teams)
-- [ ] Dashboard web para visualización de métricas
+- [ ] Dashboard web para visualización de métricas del equipo
+- [ ] Integración con webhooks (Slack, Discord, Microsoft Teams)
+- [ ] Métricas y reportes semanales/mensuales
+- [ ] Sistema de permisos y roles (líder técnico, desarrollador, revisor)
+- [ ] API REST para integración con herramientas externas
+- [ ] Integración con Jira/Linear para tracking de tareas
 
 ## Contribuir
 

@@ -10,10 +10,12 @@ El proyecto ha sido refactorizado en módulos especializados para mejorar la man
 src/
 ├── main.rs        # Punto de entrada y loop principal del watcher
 ├── ai.rs          # Comunicación con Claude AI
-├── git.rs         # Operaciones de Git
-├── tests.rs       # Ejecución y diagnóstico de tests
+├── config.rs      # Gestión de configuración (.sentinelrc.toml)
 ├── docs.rs        # Generación de documentación
-└── ui.rs          # Interfaz de usuario
+├── git.rs         # Operaciones de Git
+├── stats.rs       # Estadísticas y métricas de productividad
+├── tests.rs       # Ejecución y diagnóstico de tests
+└── ui.rs          # Interfaz de usuario y validación de proyectos
 ```
 
 ## Descripción de Módulos
@@ -22,16 +24,21 @@ src/
 **Responsabilidad**: Punto de entrada y orquestación principal
 
 - Configuración del file watcher (notify)
+- **Validación de rutas y estructura del proyecto** (v3.3.1):
+  - Valida existencia del proyecto seleccionado
+  - Valida existencia del directorio `src/`
+  - Manejo de errores descriptivos con `eprintln!`
 - Loop principal de detección de cambios
 - Coordinación entre módulos
-- Gestión de hilos (pausa/reporte)
+- Gestión de hilos (pausa/reporte/estadísticas/config)
 - Manejo de estado compartido (Arc/Mutex)
 - Lectura centralizada de stdin mediante canal compartido con el hilo de teclado
 - Debounce de eventos del watcher para evitar procesamiento duplicado
 - Drenado de eventos pendientes después de cada procesamiento
 
 **Funciones**:
-- `main()` - Punto de entrada principal
+- `main()` - Punto de entrada principal con validaciones robustas
+- `inicializar_sentinel(project_path: &Path) -> SentinelConfig` - Inicializa o carga configuración
 
 ---
 
@@ -129,37 +136,161 @@ src/
 - `seleccionar_proyecto() -> PathBuf`
   - Muestra menú interactivo de proyectos disponibles
   - Escanea directorio padre (`../`)
+  - Valida que la selección del usuario sea válida
+  - Valida que haya proyectos disponibles
   - Retorna PathBuf del proyecto seleccionado
+  - Maneja errores con mensajes descriptivos (v3.3.1)
+
+---
+
+### `config.rs`
+**Responsabilidad**: Gestión de configuración del proyecto
+
+**Funciones públicas**:
+- `SentinelConfig::load(project_path: &Path) -> Option<SentinelConfig>`
+  - Carga configuración desde `.sentinelrc.toml`
+  - Retorna None si el archivo no existe
+
+- `SentinelConfig::save(&self, project_path: &Path) -> Result<()>`
+  - Guarda la configuración actual en `.sentinelrc.toml`
+
+- `SentinelConfig::default(nombre: String, gestor: String) -> Self`
+  - Crea configuración por defecto para un nuevo proyecto
+
+- `SentinelConfig::detectar_gestor(project_path: &Path) -> String`
+  - Detecta el gestor de paquetes (npm, yarn, pnpm, bun)
+
+- `SentinelConfig::debe_ignorar(&self, path: &Path) -> bool`
+  - Verifica si un archivo debe ser ignorado según la configuración
+
+- `SentinelConfig::abrir_en_editor(project_path: &Path)`
+  - Abre el archivo de configuración en el editor del sistema
+
+- `SentinelConfig::eliminar(project_path: &Path) -> Result<()>`
+  - Elimina el archivo de configuración
+
+**Estructura de datos**:
+```rust
+pub struct SentinelConfig {
+    pub nombre_proyecto: String,
+    pub gestor_paquetes: String,
+    pub ignorar_patrones: Vec<String>,
+}
+```
+
+**Dependencias**:
+- `toml` - Serialización/deserialización TOML
+- `serde` - Framework de serialización
+
+---
+
+### `stats.rs`
+**Responsabilidad**: Estadísticas y métricas de productividad
+
+**Funciones públicas**:
+- `SentinelStats::cargar(project_path: &Path) -> Self`
+  - Carga estadísticas desde `.sentinel-stats.json`
+  - Crea estadísticas vacías si no existen
+
+- `SentinelStats::guardar(&self, project_path: &Path)`
+  - Guarda las estadísticas actuales en `.sentinel-stats.json`
+
+- `SentinelStats::incrementar_bugs_evitados(&mut self)`
+  - Incrementa contador de bugs críticos evitados
+
+- `SentinelStats::incrementar_sugerencias(&mut self)`
+  - Incrementa contador de sugerencias aplicadas
+
+- `SentinelStats::incrementar_tests_corregidos(&mut self)`
+  - Incrementa contador de tests fallidos corregidos con IA
+
+- `SentinelStats::agregar_tiempo_ahorrado(&mut self, minutos: u32)`
+  - Agrega tiempo estimado ahorrado en minutos
+
+**Estructura de datos**:
+```rust
+pub struct SentinelStats {
+    pub bugs_criticos_evitados: u32,
+    pub sugerencias_aplicadas: u32,
+    pub tests_fallidos_corregidos: u32,
+    pub tiempo_estimado_ahorrado_mins: u32,
+}
+```
+
+**Dependencias**:
+- `serde` - Serialización
+- `serde_json` - Formato JSON
 
 ---
 
 ## Flujo de Datos
 
 ```
-┌──────────────┐
-│   main.rs    │
-│  (watcher)   │
-└──────┬───────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         main.rs                              │
+│                     (inicialización)                         │
+└──────┬───────────────────────────────────────────────────────┘
        │
        ├──▶ ui::seleccionar_proyecto()
+       │         └──▶ Validación de ruta válida (v3.3.1)
+       │         └──▶ Validación de proyectos disponibles (v3.3.1)
+       │
+       ├──▶ Validación de existencia del proyecto (v3.3.1)
+       │
+       ├──▶ config::SentinelConfig::load() / inicializar_sentinel()
+       │         └──▶ Carga .sentinelrc.toml o crea configuración por defecto
+       │         └──▶ Detecta gestor de paquetes (npm/yarn/pnpm/bun)
+       │
+       ├──▶ Validación de existencia de directorio src/ (v3.3.1)
+       │         └──▶ Error descriptivo si no existe
+       │
+       ├──▶ stats::SentinelStats::cargar()
+       │         └──▶ Carga .sentinel-stats.json
+       │
+       └──▶ Configuración del watcher con validación de errores (v3.3.1)
+
+┌──────────────────────────────────────────────────────────────┐
+│                    main.rs (loop principal)                  │
+│                    (monitoreo de archivos)                   │
+└──────┬───────────────────────────────────────────────────────┘
+       │
+       ├──▶ config::debe_ignorar()  (filtrado de archivos según config)
        │
        ├──▶ ai::analizar_arquitectura()  (consejo en consola, código en .suggested)
+       │         └──▶ stats::incrementar_bugs_evitados() [si crítico]
+       │         └──▶ stats::incrementar_sugerencias() [si genera .suggested]
        │
        ├──▶ tests::ejecutar_tests()      (salida de Jest visible en consola)
-       │        └──▶ tests::pedir_ayuda_test() [si falla, con timeout 30s]
+       │         └──▶ tests::pedir_ayuda_test() [si falla, con timeout 30s]
+       │                   └──▶ stats::incrementar_tests_corregidos()
        │
        ├──▶ docs::actualizar_documentacion()
        │
-       └──▶ git::generar_mensaje_commit()
-            └──▶ git::preguntar_commit() [con timeout 30s]
+       ├──▶ git::generar_mensaje_commit()
+       │         └──▶ git::preguntar_commit() [con timeout 30s]
+       │
+       └──▶ stats::guardar()  (persiste métricas)
 
-Hilo de teclado (stdin centralizado):
-  'p'       ──▶ Pausa/Reanuda
-  'r'       ──▶ git::generar_reporte_diario()
-  's'/'n'   ──▶ Reenvía respuesta al loop principal (cuando espera input)
+┌──────────────────────────────────────────────────────────────┐
+│           Hilo de teclado (stdin centralizado)               │
+└──────┬───────────────────────────────────────────────────────┘
+       │
+       ├──▶ 'p'       ──▶ Pausa/Reanuda monitoreo
+       │
+       ├──▶ 'r'       ──▶ git::generar_reporte_diario()
+       │
+       ├──▶ 'm'       ──▶ Muestra dashboard de stats en consola
+       │
+       ├──▶ 'c'       ──▶ config::abrir_en_editor()
+       │
+       ├──▶ 'x'       ──▶ config::eliminar() (con confirmación)
+       │
+       └──▶ 's'/'n'   ──▶ Reenvía respuesta al loop principal (cuando espera input)
 
-Debounce: ignora eventos duplicados del mismo archivo (15s)
-Drenado: descarta eventos acumulados después de cada procesamiento
+Mecanismos de optimización:
+  • Debounce: ignora eventos duplicados del mismo archivo (15s)
+  • Drenado: descarta eventos acumulados después de cada procesamiento
+  • Validación temprana: errores descriptivos antes de operaciones costosas
 ```
 
 ## Ventajas de esta Arquitectura
@@ -199,8 +330,12 @@ Fácil agregar nuevas funcionalidades sin afectar código existente.
 
 Posibles mejoras a la arquitectura:
 
-- [ ] Agregar módulo `config.rs` para configuración centralizada
+- [x] Agregar módulo `config.rs` para configuración centralizada (v3.3)
+- [x] Agregar módulo `stats.rs` para métricas de productividad (v3.3)
+- [x] Validación robusta de rutas y directorios (v3.3.1)
 - [ ] Crear módulo `errors.rs` con tipos de error personalizados
 - [ ] Implementar traits para abstraer funcionalidades comunes
 - [ ] Agregar tests unitarios para cada módulo
 - [ ] Documentación con `cargo doc`
+- [ ] Módulo `security.rs` para escaneo de secretos (Fase 4)
+- [ ] Módulo `pr.rs` para integración con GitHub API (Fase 5)

@@ -5,6 +5,10 @@
 use reqwest::blocking::Client;
 use serde_json::json;
 use std::fs;
+use std::sync::{Arc, Mutex};
+use std::path::Path;
+use crate::stats::SentinelStats;
+use crate::config::SentinelConfig;
 
 /// Realiza una consulta al API de Claude AI (Anthropic).
 ///
@@ -72,23 +76,52 @@ pub fn consultar_claude(prompt: String) -> anyhow::Result<String> {
 ///
 /// Crea un archivo `{file_name}.suggested` con la versión mejorada del código.
 
-pub fn analizar_arquitectura(codigo: &str, file_name: &str) -> anyhow::Result<bool> {
+pub fn analizar_arquitectura(
+    codigo: &str,
+    file_name: &str,
+    stats: Arc<Mutex<SentinelStats>>,
+    config: &SentinelConfig, // <-- Pasamos la config
+    project_path: &Path
+) -> anyhow::Result<bool> {
+    // Convertimos el Vec<String> de reglas en una lista numerada para el prompt
+    let reglas_str = config.architecture_rules.iter()
+        .enumerate()
+        .map(|(i, r)| format!("{}. {}", i + 1, r))
+        .collect::<Vec<_>>()
+        .join("\n");
+
     let prompt = format!(
-        "Actúa como un Arquitecto de Software experto en NestJS. Analiza {}.\n\
-        REGLAS: Inicia con 'CRITICO' si hay fallos graves, o 'SEGURO' si está bien.\n\
-        Incluye el código mejorado en un bloque ```typescript.\n\nCódigo:\n{}", 
-        file_name, codigo
+        "Actúa como un Arquitecto de Software experto en {}. \n\
+        Analiza el archivo '{}' basándote estrictamente en estas reglas:\n\
+        {}\n\n\
+        REGLAS DE SALIDA: Inicia con 'CRITICO' si hay fallos graves, o 'SEGURO' si está bien.\n\
+        Incluye el código mejorado en un bloque ```typescript.\n\n\
+        Código:\n{}",
+        config.framework, file_name, reglas_str, codigo
     );
 
     let respuesta = consultar_claude(prompt)?;
+    let es_critico = respuesta.trim().to_uppercase().starts_with("CRITICO");
 
+    // Actualizamos estadísticas en memoria
+    {
+        let mut s = stats.lock().unwrap();
+        s.total_analisis += 1;
+        if es_critico {
+            s.bugs_criticos_evitados += 1;
+            s.tiempo_estimado_ahorrado_mins += 20;
+        }
+        s.guardar(project_path); // Guardamos en disco de inmediato
+    }
+
+    // Guardamos sugerencia y limpiamos consola
     let sugerencia = extraer_codigo(&respuesta);
     fs::write(format!("{}.suggested", file_name), &sugerencia)?;
 
     let consejo = eliminar_bloques_codigo(&respuesta);
     println!("\n✨ CONSEJO DE CLAUDE:\n{}", consejo);
 
-    Ok(!respuesta.trim().to_uppercase().starts_with("CRITICO"))
+    Ok(!es_critico)
 }
 
 /// Extrae bloques de código TypeScript de una respuesta de Claude.
@@ -104,15 +137,19 @@ pub fn analizar_arquitectura(codigo: &str, file_name: &str) -> anyhow::Result<bo
 ///
 /// Código TypeScript extraído (sin delimitadores) o el texto original.
 
-fn eliminar_bloques_codigo(texto: &str) -> String {
+pub fn eliminar_bloques_codigo(texto: &str) -> String {
     let mut resultado = String::new();
-    let mut dentro_bloque = false;
+    let mut en_bloque = false;
+
     for linea in texto.lines() {
-        if linea.trim_start().starts_with("```") {
-            dentro_bloque = !dentro_bloque;
+        if linea.trim().starts_with("```") {
+            en_bloque = !en_bloque;
+            if !en_bloque {
+                resultado.push_str("\n[... Código guardado en .suggested ...]\n");
+            }
             continue;
         }
-        if !dentro_bloque {
+        if !en_bloque {
             resultado.push_str(linea);
             resultado.push('\n');
         }

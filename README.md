@@ -547,7 +547,39 @@ curl -I https://api.anthropic.com
 - [x] Configuración personalizable mediante archivo `.sentinelrc.toml` - v3.3
 - [x] Sistema de estadísticas y métricas de productividad - v3.3
 
-### Fase 4: El Guardián de Seguridad (SecOps) 🔒
+### Fase 4: API Keys y Modelos de IA + Expansión Multiplataforma 🌐🤖
+**Enfoque:** Flexibilidad en modelos de IA y compatibilidad con más tecnologías
+
+- [ ] **Gestión de API Keys y Modelos**
+  - Soporte para múltiples proveedores de IA:
+    - OpenAI (GPT-4, GPT-3.5)
+    - Anthropic Claude (Sonnet, Opus, Haiku)
+    - Google Gemini
+    - Mistral AI
+    - Modelos locales (Ollama, LM Studio)
+  - Configuración flexible por archivo `.sentinelrc.toml`
+  - Selección dinámica de modelo según tarea (análisis ligero vs. revisión profunda)
+  - Sistema de fallback automático entre modelos
+  - Cache de respuestas para reducir costos de API
+  - Estimación y tracking de costos por proveedor
+
+- [ ] **Expansión Multiplataforma**
+  - Soporte para otros frameworks JavaScript:
+    - Angular (standalone components, signals)
+    - React (hooks, Context API)
+    - Vue 3 (Composition API)
+    - SolidJS, Svelte
+  - Integración con otros test runners:
+    - Vitest
+    - Mocha + Chai
+    - Playwright (E2E)
+    - Cypress
+  - Soporte para otros lenguajes:
+    - Python (pytest, Django, FastAPI)
+    - Go (testing package)
+    - Java (JUnit, Spring Boot)
+
+### Fase 5: El Guardián de Seguridad (SecOps) 🔒
 **Enfoque:** Prevención de riesgos y blindaje de código
 
 - [ ] **Módulo de Escaneo de Secretos**
@@ -575,7 +607,7 @@ curl -I https://api.anthropic.com
   - Sugerencias automáticas de validadores faltantes
   - Análisis de vectores de ataque comunes (OWASP Top 10)
 
-### Fase 5: El Revisor de Élite (PR Mode) 🔍
+### Fase 6: El Revisor de Élite (PR Mode) 🔍
 **Enfoque:** Colaboración y calidad colectiva
 
 - [ ] **Integración con GitHub API**
@@ -600,24 +632,6 @@ curl -I https://api.anthropic.com
   - Checklist automático de calidad (tests, docs, seguridad)
   - Sugerencias de mejoras opcionales vs. cambios obligatorios
   - Integración con sistemas de CI/CD para bloquear merges inseguros
-
-### Fase 6: Expansión Multiplataforma 🌐
-**Enfoque:** Compatibilidad con más tecnologías
-
-- [ ] Soporte para otros frameworks JavaScript:
-  - Angular (standalone components, signals)
-  - React (hooks, Context API)
-  - Vue 3 (Composition API)
-  - SolidJS, Svelte
-- [ ] Integración con otros test runners:
-  - Vitest
-  - Mocha + Chai
-  - Playwright (E2E)
-  - Cypress
-- [ ] Soporte para otros lenguajes:
-  - Python (pytest, Django, FastAPI)
-  - Go (testing package)
-  - Java (JUnit, Spring Boot)
 
 ### Fase 7: Empresa y Escalabilidad 🚀
 **Enfoque:** Herramientas para equipos y organizaciones

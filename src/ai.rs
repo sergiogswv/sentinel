@@ -80,8 +80,9 @@ pub fn analizar_arquitectura(
     codigo: &str,
     file_name: &str,
     stats: Arc<Mutex<SentinelStats>>,
-    config: &SentinelConfig, // <-- Pasamos la config
-    project_path: &Path
+    config: &SentinelConfig,
+    project_path: &Path,
+    file_path: &Path  // <-- Ruta completa del archivo modificado
 ) -> anyhow::Result<bool> {
     // Convertimos el Vec<String> de reglas en una lista numerada para el prompt
     let reglas_str = config.architecture_rules.iter()
@@ -109,14 +110,17 @@ pub fn analizar_arquitectura(
         s.total_analisis += 1;
         if es_critico {
             s.bugs_criticos_evitados += 1;
+            s.sugerencias_aplicadas += 1;
             s.tiempo_estimado_ahorrado_mins += 20;
         }
         s.guardar(project_path); // Guardamos en disco de inmediato
     }
 
-    // Guardamos sugerencia y limpiamos consola
+    // Guardamos sugerencia en el proyecto original (mismo path que el archivo)
     let sugerencia = extraer_codigo(&respuesta);
-    fs::write(format!("{}.suggested", file_name), &sugerencia)?;
+    let suggested_path = file_path.with_extension(format!("{}.suggested",
+        file_path.extension().and_then(|e| e.to_str()).unwrap_or("ts")));
+    fs::write(&suggested_path, &sugerencia)?;
 
     let consejo = eliminar_bloques_codigo(&respuesta);
     println!("\n✨ CONSEJO DE CLAUDE:\n{}", consejo);

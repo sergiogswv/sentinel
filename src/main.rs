@@ -353,8 +353,9 @@ fn main() {
                 &codigo,
                 &file_name,
                 Arc::clone(&stats_loop),
-                &config_loop, // Pasamos la config completa
+                &config_loop,
                 &project_path,
+                &changed_path,  // <-- Pasamos la ruta completa del archivo
             ) {
                 Ok(true) => {
                     println!("{}", "   ✅ Arquitectura aprobada.".green());

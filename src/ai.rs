@@ -141,6 +141,21 @@ fn guardar_en_cache(prompt: &str, respuesta: &str, project_path: &Path) -> anyho
     Ok(())
 }
 
+/// Limpia completamente el caché de Sentinel
+pub fn limpiar_cache(project_path: &Path) -> anyhow::Result<()> {
+    let cache_dir = project_path.join(".sentinel/cache");
+
+    if cache_dir.exists() {
+        fs::remove_dir_all(&cache_dir)?;
+        println!("{}", "   🗑️  Caché limpiado exitosamente.".green());
+        println!("{}", "   💡 El caché se regenerará automáticamente en las próximas consultas.".dimmed());
+    } else {
+        println!("{}", "   ℹ️  No hay caché para limpiar.".yellow());
+    }
+
+    Ok(())
+}
+
 // --- IMPLEMENTACIONES ESPECÍFICAS ---
 
 fn consultar_gemini_interactions(

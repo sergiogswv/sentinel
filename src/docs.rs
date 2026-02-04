@@ -40,7 +40,7 @@ pub fn actualizar_documentacion(
     docs_path.set_extension("md");
 
     let nueva_doc = format!(
-        "# 📖 Documentación: {}\n\n> ✨ Actualizado automáticamente por Sentinel v4.0\n\n{}\n\n---\n*Último refactor: {:?}*",
+        "# 📖 Documentación: {}\n\n> ✨ Actualizado automáticamente por Sentinel v4.1.1\n\n{}\n\n---\n*Último refactor: {:?}*",
         file_name,
         resumen,
         std::time::SystemTime::now()

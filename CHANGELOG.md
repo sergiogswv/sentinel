@@ -5,6 +5,67 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1] - 2025-02-03
+
+### ✨ Added
+
+- **Ayuda de comandos al inicio**: Sentinel ahora muestra automáticamente la lista de comandos disponibles al iniciar
+- **Comando de ayuda** (teclas `h` o `help`): Muestra la lista de comandos en cualquier momento durante la ejecución
+- Mejor experiencia de usuario con descripción clara de cada comando
+
+### 🔧 Changed
+
+- Mensaje de inicio mejorado con número de versión visible
+- Panel de ayuda con formato claro y legible
+- **Comando `c` eliminado**: La configuración ahora se edita manualmente según preferencia del usuario
+
+### 🐛 Fixed
+
+- **Salida de tests en tiempo real**: Los tests de Jest ahora se muestran correctamente en la consola mientras se ejecutan
+- Mejora en la captura de errores para diagnóstico con IA
+- Los tests ahora muestran colores de Jest (`--colors`) para mejor legibilidad
+- Cuando los tests fallan y se solicita ayuda, se captura el error completo para análisis de IA
+
+### 🎯 Improved
+
+- **Respuestas de IA más concisas**: Las soluciones a errores de tests ahora son ultra-directas
+  - Problema identificado en una línea
+  - Solución en máximo 3 pasos
+  - Solo muestra el código que debe cambiar (no repite todo el archivo)
+  - Máximo 150 palabras para mantener claridad
+
+---
+
+## [4.1.0] - 2025-02-03
+
+### 🔒 Security
+
+- **Protección automática de API Keys**: Sentinel ahora agrega automáticamente archivos sensibles al `.gitignore` al crear la configuración:
+  - `.sentinelrc.toml` (contiene API keys)
+  - `.sentinel_stats.json` (estadísticas personales)
+  - `.sentinel/` (directorio completo de caché)
+- Previene la exposición accidental de credenciales en repositorios públicos
+
+### ✨ Added
+
+- **Comando para limpiar caché** (tecla `l`):
+  - Elimina todo el caché de respuestas de IA con confirmación
+  - Útil para liberar espacio o forzar respuestas frescas
+  - Incluye mensajes informativos sobre el estado del caché
+
+### 🔧 Changed
+
+- El archivo `.gitignore` se actualiza automáticamente al crear la configuración
+- Mejoras en los mensajes de confirmación para acciones destructivas
+
+### 📝 Documentation
+
+- Documentación actualizada con el nuevo comando `l`
+- Guía de gestión de caché mejorada
+- Sección de seguridad y protección de API Keys agregada
+
+---
+
 ## [4.0.0] - 2025-02-03
 
 ### 🚨 Breaking Changes

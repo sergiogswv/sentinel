@@ -12,37 +12,84 @@ use crate::config::SentinelConfig;
 use crate::stats::SentinelStats;
 
 /// Ejecuta los tests de un archivo específico usando Jest.
+///
+/// La salida de Jest se muestra en tiempo real en la consola.
 pub fn ejecutar_tests(test_path: &str, project_path: &Path) -> Result<(), String> {
     println!("🧪 Ejecutando tests: {}", test_path.cyan());
+    println!(); // Línea en blanco para separar
 
-    let output = Command::new("npx")
-        .args(["jest", test_path, "--passWithNoTests"])
+    // Usar .status() para que la salida se muestre en tiempo real
+    let status = Command::new("npx")
+        .args(["jest", test_path, "--passWithNoTests", "--colors"])
         .current_dir(project_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+        .status()
+        .map_err(|e| format!("Error al ejecutar Jest: {}", e))?;
 
-    if output.status.success() {
+    println!(); // Línea en blanco después de la salida de Jest
+
+    if status.success() {
+        println!("{}", "   ✅ Tests pasados con éxito".green());
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        println!("{}", "   ❌ Tests fallaron".red());
+        Err("Tests fallidos. Revisa la salida anterior.".to_string())
+    }
+}
+
+/// Captura el error de un test específico ejecutando Jest nuevamente.
+pub fn capturar_error_test(test_path: &str, project_path: &Path) -> String {
+    let output = Command::new("npx")
+        .args(["jest", test_path, "--passWithNoTests", "--no-colors"])
+        .current_dir(project_path)
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+
+            // Combinar stdout y stderr para obtener todo el contexto del error
+            if !stderr.is_empty() {
+                format!("{}\n{}", stdout, stderr)
+            } else {
+                stdout
+            }
+        }
+        Err(e) => format!("Error al capturar salida de Jest: {}", e),
     }
 }
 
 /// Pide ayuda a la IA cuando un test falla.
 pub fn pedir_ayuda_test(
     codigo: &str,
-    error_jest: &str,
+    test_path: &str,
     config: &SentinelConfig,
     stats: Arc<Mutex<SentinelStats>>,
     project_path: &Path,
 ) -> anyhow::Result<()> {
     println!(
         "{}",
-        "🔍 Pidiendo ayuda a la IA para resolver el fallo...".magenta()
+        "🔍 Analizando el error con IA...".magenta()
     );
 
+    // Capturar el error ejecutando Jest nuevamente
+    let error_jest = capturar_error_test(test_path, project_path);
+
     let prompt = format!(
-        "El siguiente test de NestJS falló con este error:\n\n{}\n\nCódigo del archivo modificado:\n{}\n\nAnaliza el error y sugiere una solución técnica concisa.",
+        "Eres un experto en NestJS que da soluciones directas y accionables.\n\n\
+        ERROR DEL TEST:\n{}\n\n\
+        CÓDIGO:\n{}\n\n\
+        INSTRUCCIONES:\n\
+        1. Identifica el problema en UNA oración\n\
+        2. Da la solución en formato de pasos numerados (máximo 3 pasos)\n\
+        3. Incluye SOLO el código que debe cambiar (no repitas todo el archivo)\n\
+        4. Sé ultra-conciso: máximo 150 palabras\n\n\
+        Formato esperado:\n\
+        🔴 PROBLEMA: [una línea]\n\
+        ✅ SOLUCIÓN:\n\
+        1. [paso específico]\n\
+        2. [paso específico]\n\
+        ```typescript\n[código a cambiar]\n```",
         error_jest, codigo
     );
 

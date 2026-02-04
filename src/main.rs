@@ -9,7 +9,7 @@ use notify::{Event, EventKind, RecursiveMode, Watcher};
 use stats::SentinelStats;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Instant;
@@ -25,111 +25,13 @@ mod ui;
 
 // --- MAIN ---
 
-fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
-    if let Some(config) = SentinelConfig::load(project_path) {
-        println!(
-            "{}",
-            "🔄 Configuración cargada desde .sentinelrc.toml".green()
-        );
-        return config;
-    }
-
-    println!(
-        "{}",
-        "🚀 Configurando nuevo proyecto en Sentinel...".bright_cyan()
-    );
-
-    let gestor = SentinelConfig::detectar_gestor(project_path);
-    let nombre = project_path
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let mut config = SentinelConfig::default(nombre, gestor);
-
-    println!(
-        "\n{}",
-        "🤖 Configuración de Modelos AI".bright_magenta().bold()
-    );
-
-    // 1. Configurar Modelo Principal
-    println!("\n--- MODELO PRINCIPAL ---");
-    print!("👉 API Key: ");
-    io::stdout().flush().unwrap();
-    let mut api_key = String::new();
-    io::stdin().read_line(&mut api_key).unwrap();
-    config.primary_model.api_key = api_key.trim().to_string();
-
-    print!("👉 URL [Enter para Anthropic]: ");
-    io::stdout().flush().unwrap();
-    let mut url = String::new();
-    io::stdin().read_line(&mut url).unwrap();
-    if !url.trim().is_empty() {
-        config.primary_model.url = url.trim().to_string();
-    }
-
-    // Listar modelos si es Gemini
-    if config.primary_model.url.contains("googleapis") {
-        if let Ok(modelos) = ai::listar_modelos_gemini(&config.primary_model.api_key) {
-            println!("{}", "📂 Modelos disponibles:".cyan());
-            for (i, m) in modelos.iter().enumerate() {
-                println!("{}. {}", i + 1, m);
-            }
-            print!("👉 Selecciona número: ");
-            io::stdout().flush().unwrap();
-            let mut sel = String::new();
-            io::stdin().read_line(&mut sel).unwrap();
-            if let Ok(idx) = sel.trim().parse::<usize>() {
-                if idx > 0 && idx <= modelos.len() {
-                    config.primary_model.name = modelos[idx - 1].clone();
-                }
-            }
-        }
-    }
-
-    // 2. Configurar Modelo de Fallback (Opcional)
-    println!("\n--- MODELO DE FALLBACK (Opcional) ---");
-    print!("👉 ¿Configurar un modelo de respaldo por si falla el principal? (s/n): ");
-    io::stdout().flush().unwrap();
-    let mut use_fallback = String::new();
-    io::stdin().read_line(&mut use_fallback).unwrap();
-
-    if use_fallback.trim().to_lowercase() == "s" {
-        let mut fb = config::ModelConfig::default();
-        print!("👉 API Key: ");
-        io::stdout().flush().unwrap();
-        let mut ak = String::new();
-        io::stdin().read_line(&mut ak).unwrap();
-        fb.api_key = ak.trim().to_string();
-
-        print!("👉 URL del modelo: ");
-        io::stdout().flush().unwrap();
-        let mut u = String::new();
-        io::stdin().read_line(&mut u).unwrap();
-        fb.url = u.trim().to_string();
-
-        print!("👉 Nombre del modelo: ");
-        io::stdout().flush().unwrap();
-        let mut nm = String::new();
-        io::stdin().read_line(&mut nm).unwrap();
-        fb.name = nm.trim().to_string();
-
-        config.fallback_model = Some(fb);
-    }
-
-    let _ = config.save(project_path);
-    println!("{}", "✅ Configuración guardada.".green());
-    config
-}
-
 fn main() {
     let project_path = ui::seleccionar_proyecto();
     if !project_path.exists() {
         std::process::exit(1);
     }
 
-    let config = Arc::new(inicializar_sentinel(&project_path));
+    let config = Arc::new(ui::inicializar_sentinel(&project_path));
     let stats = Arc::new(Mutex::new(SentinelStats::cargar(&project_path)));
 
     let esta_pausado = Arc::new(Mutex::new(false));
@@ -188,10 +90,25 @@ fn main() {
                         (s.tiempo_estimado_ahorrado_mins as f32 / 60.0)
                     );
                     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                } else if cmd == "c" {
-                    SentinelConfig::abrir_en_editor(&project_path_hilo);
+                } else if cmd == "l" {
+                    print!(
+                        "⚠️  ¿Limpiar todo el caché? Esto eliminará las respuestas guardadas (s/n): "
+                    );
+                    io::stdout().flush().unwrap();
+                    let mut confirm = String::new();
+                    if io::stdin().read_line(&mut confirm).is_ok()
+                        && confirm.trim().to_lowercase() == "s"
+                    {
+                        if let Err(e) = ai::limpiar_cache(&project_path_hilo) {
+                            println!("   ❌ Error al limpiar caché: {}", e);
+                        }
+                    } else {
+                        println!("   ⏭️  Limpieza de caché cancelada.");
+                    }
+                } else if cmd == "h" || cmd == "help" {
+                    ui::mostrar_ayuda();
                 } else if cmd == "x" {
-                    print!("⚠️ ¿Reiniciar configuración? (s/n): ");
+                    print!("⚠️  ¿Reiniciar configuración? (s/n): ");
                     io::stdout().flush().unwrap();
                     let mut confirm = String::new();
                     if io::stdin().read_line(&mut confirm).is_ok()
@@ -236,9 +153,12 @@ fn main() {
 
     println!(
         "\n{} {}",
-        "🛡️ Sentinel activo en:".green(),
+        "🛡️ Sentinel v4.1.1 activo en:".green().bold(),
         project_path.display()
     );
+
+    // Mostrar ayuda de comandos al inicio
+    ui::mostrar_ayuda();
 
     let mut ultimo_cambio: HashMap<PathBuf, Instant> = HashMap::new();
     while let Ok(changed_path) = rx.recv() {
@@ -309,7 +229,7 @@ fn main() {
                         if leer_respuesta().as_deref() == Some("s") {
                             let _ = tests::pedir_ayuda_test(
                                 &codigo,
-                                "Test falló",
+                                &test_rel_path,
                                 &config,
                                 Arc::clone(&stats),
                                 &project_path,

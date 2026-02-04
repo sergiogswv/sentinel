@@ -26,6 +26,9 @@ mod ui;
 // --- MAIN ---
 
 fn main() {
+    // Mostrar banner al inicio
+    ui::mostrar_banner();
+
     let project_path = ui::seleccionar_proyecto();
     if !project_path.exists() {
         std::process::exit(1);

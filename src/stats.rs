@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
@@ -9,6 +9,8 @@ pub struct SentinelStats {
     pub tests_fallidos_corregidos: u32,
     pub total_analisis: u32,
     pub tiempo_estimado_ahorrado_mins: u32,
+    pub total_cost_usd: f64,
+    pub total_tokens_used: u64,
 }
 
 impl SentinelStats {

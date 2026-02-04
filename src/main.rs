@@ -2,29 +2,6 @@
 //!
 //! Herramienta de monitoreo en tiempo real que vigila cambios en archivos TypeScript,
 //! analiza el código con Claude AI, ejecuta tests y gestiona commits automáticamente.
-//!
-//! ## Arquitectura
-//!
-//! ```text
-//! ┌─────────────────┐
-//! │  File Watcher   │ (notify crate)
-//! └────────┬────────┘
-//!          │ Detecta cambio en .ts
-//!          ▼
-//! ┌─────────────────┐
-//! │ Análisis Claude │ (consultar_claude)
-//! └────────┬────────┘
-//!          │ Código aprobado
-//!          ▼
-//! ┌─────────────────┐
-//! │  Jest Tests     │ (ejecutar_tests)
-//! └────────┬────────┘
-//!          │ Tests pasan
-//!          ▼
-//! ┌─────────────────┐
-//! │  Git Commit     │ (preguntar_commit)
-//! └─────────────────┘
-//! ```
 
 use colored::*;
 use config::SentinelConfig;
@@ -48,50 +25,7 @@ mod ui;
 
 // --- MAIN ---
 
-/// Punto de entrada principal de Sentinel v3.3.
-///
-/// # Flujo de ejecución
-///
-/// 1. Solicita al usuario seleccionar un proyecto
-/// 2. Configura el watcher en el directorio `src/` del proyecto
-/// 3. Inicia un hilo para detectar comandos de teclado:
-///    - 'p' → Pausa/Reanuda el monitoreo
-///    - 'r' → Genera reporte diario de productividad
-/// 4. Monitorea cambios en archivos .ts (excepto .spec.ts y .suggested)
-/// 5. Para cada cambio detectado:
-///    - Analiza arquitectura con Claude
-///    - Si pasa, ejecuta tests con Jest
-///    - Si tests pasan:
-///      * Genera documentación automática (.md)
-///      * Genera mensaje de commit inteligente
-///      * Pregunta si hacer commit
-///    - Si tests fallan, ofrece diagnóstico de Claude
-///
-/// # Comandos interactivos
-///
-/// - **'p'** → Pausar/reanudar el monitoreo de archivos
-/// - **'r'** → Generar reporte diario basado en commits del día
-///
-/// # Mecanismos de pausa
-///
-/// - Archivo `.sentinel-pause` en el directorio del proyecto
-/// - Comando 'p' en stdin (pausa/reanuda)
-///
-/// # Arquitectura interna
-///
-/// Utiliza Arc<Mutex<T>> para compartir estado entre hilos:
-/// - `esta_pausado`: Bandera de pausa compartida entre hilo de teclado y loop principal
-/// - `pause_file`: Ruta del archivo de pausa compartida entre hilos
-/// - Channel (tx/rx): Comunicación entre watcher y loop principal
-///
-/// # Panics
-///
-/// - Si faltan variables de entorno `ANTHROPIC_AUTH_TOKEN` o `ANTHROPIC_BASE_URL`
-/// - Si el directorio `src/` no existe en el proyecto seleccionado
-/// - Si git no está instalado o el proyecto no es un repositorio git válido
-
 fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
-    // 1. Intentar cargar configuración existente
     if let Some(config) = SentinelConfig::load(project_path) {
         println!(
             "{}",
@@ -100,7 +34,6 @@ fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
         return config;
     }
 
-    // 2. Si no existe, configurar por primera vez
     println!(
         "{}",
         "🚀 Configurando nuevo proyecto en Sentinel...".bright_cyan()
@@ -113,84 +46,118 @@ fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
         .to_str()
         .unwrap()
         .to_string();
+    let mut config = SentinelConfig::default(nombre, gestor);
 
-    let config = SentinelConfig::default(nombre, gestor);
+    println!(
+        "\n{}",
+        "🤖 Configuración de Modelos AI".bright_magenta().bold()
+    );
 
-    // 3. Guardar para la próxima vez
-    if let Err(e) = config.save(project_path) {
-        println!("⚠️ No se pudo guardar la config: {}", e);
+    // 1. Configurar Modelo Principal
+    println!("\n--- MODELO PRINCIPAL ---");
+    print!("👉 API Key: ");
+    io::stdout().flush().unwrap();
+    let mut api_key = String::new();
+    io::stdin().read_line(&mut api_key).unwrap();
+    config.primary_model.api_key = api_key.trim().to_string();
+
+    print!("👉 URL [Enter para Anthropic]: ");
+    io::stdout().flush().unwrap();
+    let mut url = String::new();
+    io::stdin().read_line(&mut url).unwrap();
+    if !url.trim().is_empty() {
+        config.primary_model.url = url.trim().to_string();
     }
 
-    println!("{}", "✅ Proyecto inicializado y guardado.".green());
+    // Listar modelos si es Gemini
+    if config.primary_model.url.contains("googleapis") {
+        if let Ok(modelos) = ai::listar_modelos_gemini(&config.primary_model.api_key) {
+            println!("{}", "📂 Modelos disponibles:".cyan());
+            for (i, m) in modelos.iter().enumerate() {
+                println!("{}. {}", i + 1, m);
+            }
+            print!("👉 Selecciona número: ");
+            io::stdout().flush().unwrap();
+            let mut sel = String::new();
+            io::stdin().read_line(&mut sel).unwrap();
+            if let Ok(idx) = sel.trim().parse::<usize>() {
+                if idx > 0 && idx <= modelos.len() {
+                    config.primary_model.name = modelos[idx - 1].clone();
+                }
+            }
+        }
+    }
+
+    // 2. Configurar Modelo de Fallback (Opcional)
+    println!("\n--- MODELO DE FALLBACK (Opcional) ---");
+    print!("👉 ¿Configurar un modelo de respaldo por si falla el principal? (s/n): ");
+    io::stdout().flush().unwrap();
+    let mut use_fallback = String::new();
+    io::stdin().read_line(&mut use_fallback).unwrap();
+
+    if use_fallback.trim().to_lowercase() == "s" {
+        let mut fb = config::ModelConfig::default();
+        print!("👉 API Key: ");
+        io::stdout().flush().unwrap();
+        let mut ak = String::new();
+        io::stdin().read_line(&mut ak).unwrap();
+        fb.api_key = ak.trim().to_string();
+
+        print!("👉 URL del modelo: ");
+        io::stdout().flush().unwrap();
+        let mut u = String::new();
+        io::stdin().read_line(&mut u).unwrap();
+        fb.url = u.trim().to_string();
+
+        print!("👉 Nombre del modelo: ");
+        io::stdout().flush().unwrap();
+        let mut nm = String::new();
+        io::stdin().read_line(&mut nm).unwrap();
+        fb.name = nm.trim().to_string();
+
+        config.fallback_model = Some(fb);
+    }
+
+    let _ = config.save(project_path);
+    println!("{}", "✅ Configuración guardada.".green());
     config
 }
 
 fn main() {
-    // 1. Selección y rutas (PathBuf es nuestro mejor amigo)
     let project_path = ui::seleccionar_proyecto();
-
-    // Validar que el proyecto existe
     if !project_path.exists() {
-        eprintln!("{}", "❌ Error: La ruta del proyecto no existe.".red().bold());
-        eprintln!("   Ruta: {}", project_path.display());
         std::process::exit(1);
     }
 
-    // 2. Inicializar configuración (carga o crea .sentinelrc.toml)
-    let config = inicializar_sentinel(&project_path);
-    let config = Arc::new(config); // Compartir entre hilos
+    let config = Arc::new(inicializar_sentinel(&project_path));
+    let stats = Arc::new(Mutex::new(SentinelStats::cargar(&project_path)));
 
-    let path_to_watch = project_path.join("src");
-
-    // Validar que el directorio src/ existe
-    if !path_to_watch.exists() {
-        eprintln!("{}", "❌ Error: El directorio 'src/' no existe en el proyecto.".red().bold());
-        eprintln!("   Proyecto: {}", project_path.display());
-        eprintln!("   Se esperaba: {}", path_to_watch.display());
-        eprintln!("\n💡 Asegúrate de seleccionar un proyecto que tenga una carpeta 'src/'");
-        std::process::exit(1);
-    }
-    // Usamos Arc para que el hilo y el loop compartan la ruta del archivo de pausa
-    let pause_file = Arc::new(project_path.join(".sentinel-pause"));
-
-    // 3. Control de Pausa Compartida
     let esta_pausado = Arc::new(Mutex::new(false));
-    let pausa_hilo = Arc::clone(&esta_pausado);
     let pausa_loop = Arc::clone(&esta_pausado);
-
-    // 4. Clones para los hilos (Rust requiere copias explícitas)
-    let config_watcher = Arc::clone(&config);
-    let config_loop = Arc::clone(&config);
-    let project_path_hilo = project_path.clone();
-    let pause_file_hilo = Arc::clone(&pause_file);
-
-    // 5. EL CANAL (Debe estar aquí afuera para que 'rx' sea visible en el loop)
-    let (tx, rx) = std::sync::mpsc::channel::<PathBuf>();
-
-    // Canal para reenviar input de stdin al loop principal cuando se espera respuesta
+    let (tx, rx) = mpsc::channel::<PathBuf>();
     let (stdin_tx, stdin_rx) = mpsc::channel::<String>();
     let stdin_rx = Arc::new(Mutex::new(stdin_rx));
     let esperando_input = Arc::new(Mutex::new(false));
+
+    // Hilo teclado
+    let project_path_hilo = project_path.clone();
+    let config_hilo = Arc::clone(&config);
+    let stats_hilo = Arc::clone(&stats);
+    let pausa_hilo = Arc::clone(&esta_pausado);
     let esperando_input_hilo = Arc::clone(&esperando_input);
 
-    let stats = Arc::new(Mutex::new(SentinelStats::cargar(&project_path)));
-    let stats_hilo = Arc::clone(&stats); // Para el comando 'm'
-    let stats_loop = Arc::clone(&stats); // Para el análisis de archivos
-
-    // Hilo de Teclado (Pausa 'P', Reporte 'R', y reenvío de respuestas)
     thread::spawn(move || {
         loop {
             let mut input = String::new();
             if io::stdin().read_line(&mut input).is_ok() {
                 let cmd = input.trim().to_lowercase();
-                // Si el loop principal espera una respuesta, reenviar el input
                 if *esperando_input_hilo.lock().unwrap() {
                     let _ = stdin_tx.send(cmd);
                 } else if cmd == "p" {
                     let mut p = pausa_hilo.lock().unwrap();
                     *p = !*p;
                     println!(
-                        " ⌨️  SENTINEL: {}",
+                        " ⌨️ SENTINEL: {}",
                         if *p {
                             "PAUSADO".yellow()
                         } else {
@@ -198,135 +165,98 @@ fn main() {
                         }
                     );
                 } else if cmd == "r" {
-                    git::generar_reporte_diario(&project_path_hilo);
+                    git::generar_reporte_diario(
+                        &project_path_hilo,
+                        &config_hilo,
+                        Arc::clone(&stats_hilo),
+                    );
                 } else if cmd == "m" {
-                    let stats = stats_hilo.lock().unwrap();
+                    let s = stats_hilo.lock().unwrap();
                     println!(
                         "\n{}",
                         "📊 DASHBOARD DE RENDIMIENTO SENTINEL".bright_green().bold()
                     );
                     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                     println!(
-                        "🚫 Bugs Críticos Evitados:  {}",
-                        stats.bugs_criticos_evitados.to_string().red()
+                        "🚫 Bugs Evitados:  {}",
+                        s.bugs_criticos_evitados.to_string().red()
                     );
+                    println!("💰 Costo Acumulado: ${:.4}", s.total_cost_usd);
+                    println!("🎟️ Tokens Usados:   {}", s.total_tokens_used);
                     println!(
-                        "✅ Sugerencias Generadas:   {}",
-                        stats.sugerencias_aplicadas.to_string().cyan()
-                    );
-                    println!(
-                        "🧪 Tests Corregidos con IA: {}",
-                        stats.tests_fallidos_corregidos.to_string().yellow()
-                    );
-                    println!(
-                        "⏳ Tiempo Ahorrado:         {} horas",
-                        (stats.tiempo_estimado_ahorrado_mins as f32 / 60.0)
+                        "⏳ Tiempo Ahorrado: {}h",
+                        (s.tiempo_estimado_ahorrado_mins as f32 / 60.0)
                     );
                     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                 } else if cmd == "c" {
-                    // Editar configuración
                     SentinelConfig::abrir_en_editor(&project_path_hilo);
                 } else if cmd == "x" {
-                    // Reiniciar configuración
-                    print!(
-                        "{}",
-                        "⚠️  ¿Estás seguro de que quieres reiniciar la config? (s/n): "
-                            .red()
-                            .bold()
-                    );
+                    print!("⚠️ ¿Reiniciar configuración? (s/n): ");
                     io::stdout().flush().unwrap();
-
-                    // Leer la siguiente línea de stdin directamente
-                    let mut confirmacion = String::new();
-                    if io::stdin().read_line(&mut confirmacion).is_ok() {
-                        if confirmacion.trim().to_lowercase() == "s" {
-                            let _ = SentinelConfig::eliminar(&project_path_hilo);
-                            println!(
-                                "{}",
-                                "🔄 Por favor, reinicia Sentinel para aplicar los cambios."
-                                    .bright_cyan()
-                            );
-                            std::process::exit(0); // Salimos para que el usuario lo vuelva a lanzar
-                        } else {
-                            println!("{}", "   ⏭️  Operación cancelada.".yellow());
-                        }
+                    let mut confirm = String::new();
+                    if io::stdin().read_line(&mut confirm).is_ok()
+                        && confirm.trim().to_lowercase() == "s"
+                    {
+                        let _ = SentinelConfig::eliminar(&project_path_hilo);
+                        std::process::exit(0);
                     }
                 }
             }
         }
     });
 
-    // 6. El Watcher (usa config para filtrar archivos)
+    // Watcher
+    let config_watcher = Arc::clone(&config);
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         if let Ok(event) = res {
             if let EventKind::Modify(_) = event.kind {
                 for path in event.paths {
-                    // Usar la configuración para decidir si ignorar el archivo
                     if !config_watcher.debe_ignorar(&path) {
-                        let _ = tx.send(path); // Enviamos PathBuf por el canal
+                        let _ = tx.send(path);
                     }
                 }
             }
         }
     })
     .unwrap();
+    watcher
+        .watch(&project_path.join("src"), RecursiveMode::Recursive)
+        .unwrap();
 
-    if let Err(e) = watcher.watch(&path_to_watch, RecursiveMode::Recursive) {
-        eprintln!("{}", "❌ Error al configurar el watcher.".red().bold());
-        eprintln!("   Ruta: {}", path_to_watch.display());
-        eprintln!("   Error: {}", e);
-        std::process::exit(1);
-    }
-
-    println!(
-        "\n{} {}",
-        "🛡️  Sentinel v3.3 activo en:".green(),
-        project_path.display()
-    );
-
-    // Helper: pedir input al usuario a través del hilo de teclado (timeout 30s)
-    let esperando_ref = Arc::clone(&esperando_input);
-    let stdin_rx_ref = Arc::clone(&stdin_rx);
     let leer_respuesta = move || -> Option<String> {
-        *esperando_ref.lock().unwrap() = true;
-        let resultado = stdin_rx_ref
+        *esperando_input.lock().unwrap() = true;
+        let res = stdin_rx
             .lock()
             .unwrap()
             .recv_timeout(std::time::Duration::from_secs(30))
             .ok();
-        *esperando_ref.lock().unwrap() = false;
-        resultado
+        *esperando_input.lock().unwrap() = false;
+        res
     };
 
-    // 7. EL LOOP PRINCIPAL (Ahora 'rx' sí existe aquí)
-    let mut ultimo_cambio: HashMap<PathBuf, Instant> = HashMap::new();
-    let debounce = std::time::Duration::from_secs(15);
+    println!(
+        "\n{} {}",
+        "🛡️ Sentinel activo en:".green(),
+        project_path.display()
+    );
 
+    let mut ultimo_cambio: HashMap<PathBuf, Instant> = HashMap::new();
     while let Ok(changed_path) = rx.recv() {
-        // --- DEBOUNCE REAL (Drenado) ---
-        // Esperamos 500ms para que se acumulen los eventos duplicados y los limpiamos
         thread::sleep(std::time::Duration::from_millis(500));
         while rx.try_recv().is_ok() {}
 
-        if pause_file_hilo.exists() || *pausa_loop.lock().unwrap() {
+        if *pausa_loop.lock().unwrap() {
             continue;
         }
 
-        // Verificamos pausa (Archivo físico o Tecla P)
-        if pause_file_hilo.exists() || *pausa_loop.lock().unwrap() {
-            continue;
-        }
-
-        // Debounce: ignorar si el mismo archivo se procesó hace menos de 2 segundos
         let ahora = Instant::now();
         if let Some(ultimo) = ultimo_cambio.get(&changed_path) {
-            if ahora.duration_since(*ultimo) < debounce {
+            if ahora.duration_since(*ultimo) < std::time::Duration::from_secs(10) {
                 continue;
             }
         }
         ultimo_cambio.insert(changed_path.clone(), ahora);
 
-        // Rust ahora sabe que changed_path es un PathBuf
         let file_name = changed_path
             .file_name()
             .unwrap()
@@ -337,61 +267,58 @@ fn main() {
         let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
 
         if !project_path.join(&test_rel_path).exists() {
-            println!("\n⏭️  IGNORADO (sin test): {}", file_name);
             continue;
         }
 
         println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
-        thread::sleep(std::time::Duration::from_millis(250));
 
         if let Ok(codigo) = std::fs::read_to_string(&changed_path) {
-            if codigo.trim().is_empty() {
-                continue;
-            }
-
             match ai::analizar_arquitectura(
                 &codigo,
                 &file_name,
-                Arc::clone(&stats_loop),
-                &config_loop,
+                Arc::clone(&stats),
+                &config,
                 &project_path,
-                &changed_path,  // <-- Pasamos la ruta completa del archivo
+                &changed_path,
             ) {
                 Ok(true) => {
-                    println!("{}", "   ✅ Arquitectura aprobada.".green());
-
-                    match tests::ejecutar_tests(&test_rel_path, &project_path) {
-                        Ok(_) => {
-                            println!("{}", "   ✅ Tests pasados con éxito".green().bold());
-                            let _ = docs::actualizar_documentacion(&codigo, &changed_path);
-                            let mensaje_ia = git::generar_mensaje_commit(&codigo, &file_name);
-                            println!("\n🚀 Mensaje sugerido: {}", mensaje_ia.bright_cyan().bold());
-                            print!("📝 ¿Quieres hacer commit? (s/n, timeout 30s): ");
-                            io::stdout().flush().unwrap();
-                            match leer_respuesta() {
-                                Some(resp) => {
-                                    git::preguntar_commit(&project_path, &mensaje_ia, &resp)
-                                }
-                                None => println!("   ⏭️  Timeout, commit omitido."),
-                            }
+                    if tests::ejecutar_tests(&test_rel_path, &project_path).is_ok() {
+                        let _ = docs::actualizar_documentacion(
+                            &codigo,
+                            &changed_path,
+                            &config,
+                            Arc::clone(&stats),
+                            &project_path,
+                        );
+                        let msg = git::generar_mensaje_commit(
+                            &codigo,
+                            &file_name,
+                            &config,
+                            Arc::clone(&stats),
+                            &project_path,
+                        );
+                        println!("\n🚀 Mensaje: {}", msg.bright_cyan().bold());
+                        print!("📝 ¿Commit? (s/n): ");
+                        io::stdout().flush().unwrap();
+                        if let Some(r) = leer_respuesta() {
+                            git::preguntar_commit(&project_path, &msg, &r);
                         }
-                        Err(err_msg) => {
-                            println!("{}", "   ❌ Tests fallaron".red().bold());
-                            print!("\n🔍 ¿Analizar error con IA? (s/n, timeout 30s): ");
-                            io::stdout().flush().unwrap();
-                            if leer_respuesta().as_deref() == Some("s") {
-                                let _ = tests::pedir_ayuda_test(&codigo, &err_msg);
-                            }
+                    } else {
+                        print!("\n🔍 ¿Ayuda con test? (s/n): ");
+                        io::stdout().flush().unwrap();
+                        if leer_respuesta().as_deref() == Some("s") {
+                            let _ = tests::pedir_ayuda_test(
+                                &codigo,
+                                "Test falló",
+                                &config,
+                                Arc::clone(&stats),
+                                &project_path,
+                            );
                         }
                     }
                 }
-                Ok(false) => println!("{}", "   ❌ CRITICO: Corrige SOLID/Bugs".red().bold()),
-                Err(e) => println!("   ⚠️  Error de IA: {}", e),
+                _ => {}
             }
         }
-
-        // Drenar eventos pendientes que se acumularon durante el procesamiento
-        while rx.try_recv().is_ok() {}
-        ultimo_cambio.insert(changed_path, Instant::now());
     }
 }

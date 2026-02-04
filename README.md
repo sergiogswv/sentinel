@@ -1,19 +1,21 @@
 # Sentinel
 
 <p align="center">
-  <strong>🛡️ Asistente de Productividad de Élite: Orquestador de IA para la Auditoría de Arquitectura, Testing Autónomo y Observabilidad de Desarrollo.</strong>
+  <strong>🛡️ Asistente de Productividad de Élite: Orquestador de IA Multi-Modelo para la Auditoría de Arquitectura, Testing Autónomo y Observabilidad de Desarrollo.</strong>
 </p>
 
-Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de código usando Claude AI y gestiona el flujo de trabajo con Git. Diseñada para integrarse con proyectos NestJS/TypeScript como asistente de desarrollo en tiempo real.
+Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de código usando múltiples proveedores de IA (Claude, Gemini, etc.) y gestiona el flujo de trabajo con Git. Diseñada para integrarse con proyectos NestJS/TypeScript como asistente de desarrollo en tiempo real, con sistema de caché inteligente y métricas de productividad.
 
 ## Características principales
 
 - 🔍 **Monitoreo en tiempo real** del sistema de archivos (directorio `src/`) con debounce para evitar procesamiento duplicado
-- 🤖 **Análisis automático de código con Claude AI**
-  - Principios SOLID
-  - Clean Code
-  - Buenas prácticas NestJS
-  - Consejo textual visible en consola, código sugerido solo en archivo `.suggested`
+- 🤖 **Análisis automático de código con IA Multi-Modelo**
+  - Soporte para Claude (Anthropic), Gemini (Google) y otros proveedores
+  - Sistema de fallback automático entre modelos
+  - Principios SOLID, Clean Code y buenas prácticas NestJS
+  - Consejo textual visible en consola, código sugerido en archivo `.suggested`
+- 💾 **Sistema de Caché Inteligente** - reduce costos de API evitando consultas repetidas
+- 📊 **Métricas y Estadísticas en Tiempo Real** - tracking de costos, tokens y productividad (comando 'm')
 - 🧪 **Detección y ejecución de tests con Jest** con salida visible en tiempo real en la consola
 - 📝 **Flujo interactivo de commits en Git** con timeout de 30 segundos
 - 💡 **Generación de sugerencias de código** guardadas en archivos `.suggested`
@@ -21,20 +23,113 @@ Herramienta de monitoreo de archivos escrita en Rust que analiza cambios de cód
 - ✨ **Mensajes de commit inteligentes** siguiendo Conventional Commits
 - 🔧 **Diagnóstico automático de fallos en tests** con timeout de 30 segundos
 - 📚 **Auto-documentación técnica** - genera archivos .md junto a cada .ts con "manual de bolsillo" generado por IA
-- 📊 **Reportes diarios de productividad** - genera resúmenes inteligentes de los commits del día (comando 'r')
+- 📈 **Reportes diarios de productividad** - genera resúmenes inteligentes de los commits del día (comando 'r')
 - 🔄 **Stdin centralizado** - lectura de input sin conflictos entre hilos
+- ⚙️ **Configuración flexible** - archivo `.sentinelrc.toml` personalizable por proyecto
 
 ## Requisitos
 
 - [Rust](https://www.rust-lang.org/tools/install) (edition 2024)
-- Credenciales de la API de Anthropic
+- API Key de al menos un proveedor de IA (Claude o Gemini recomendados)
 
-## Variables de entorno
+## Proveedores de IA Soportados
 
-| Variable | Descripcion |
-|----------|-------------|
-| `ANTHROPIC_AUTH_TOKEN` | API key de Anthropic |
-| `ANTHROPIC_BASE_URL` | URL base de la API (ej. `https://api.anthropic.com`) |
+Sentinel puede trabajar con múltiples proveedores de IA. Elige el que mejor se adapte a tus necesidades:
+
+### Anthropic Claude (Recomendado)
+
+**Modelos disponibles:**
+- `claude-opus-4-5-20251101` - Más potente, análisis profundo
+- `claude-sonnet-4-20250514` - Equilibrado, buena relación calidad/costo
+- `claude-haiku-3-5-20241022` - Rápido y económico
+
+**Configuración:**
+- URL: `https://api.anthropic.com`
+- Obtén tu API Key en: https://console.anthropic.com
+
+### Google Gemini
+
+**Modelos disponibles:**
+- `gemini-2.0-flash` - Rápido y eficiente
+- `gemini-1.5-pro` - Análisis profundo
+- `gemini-1.5-flash` - Económico
+
+**Configuración:**
+- URL: `https://generativelanguage.googleapis.com`
+- Obtén tu API Key en: https://makersuite.google.com/app/apikey
+
+**Nota:** Sentinel puede listar automáticamente los modelos disponibles de Gemini durante la configuración.
+
+### Sistema de Fallback
+
+Puedes configurar un modelo de respaldo que se activará automáticamente si el modelo principal falla:
+
+```
+Modelo Principal: Claude Opus (análisis profundo)
+      ↓ (si falla)
+Modelo Fallback: Gemini Flash (respuesta rápida)
+```
+
+Esto garantiza alta disponibilidad y reduce interrupciones en tu flujo de trabajo.
+
+## Configuración
+
+Sentinel utiliza un archivo `.sentinelrc.toml` por proyecto que se crea automáticamente en el primer uso. La configuración incluye:
+
+- **Modelos de IA**: Modelo principal y modelo de fallback (opcional)
+- **Proveedores soportados**: Claude (Anthropic), Gemini (Google), y otros
+- **Caché**: Habilitado por defecto para reducir costos
+- **Reglas de arquitectura**: Personalizables (SOLID, Clean Code, etc.)
+- **Framework**: NestJS por defecto, configurable para otros frameworks
+
+> **Nota**: Ya no es necesario configurar variables de entorno. Todo se gestiona desde `.sentinelrc.toml`
+
+## 🚨 Migración desde v3.x a v4.0.0
+
+Si estás actualizando desde una versión anterior de Sentinel, ten en cuenta estos **cambios importantes**:
+
+### Breaking Changes
+
+1. **Configuración mediante archivo `.sentinelrc.toml`**
+   - ❌ **Obsoleto**: Variables de entorno `ANTHROPIC_AUTH_TOKEN` y `ANTHROPIC_BASE_URL`
+   - ✅ **Nuevo**: Configuración en `.sentinelrc.toml` con asistente interactivo
+
+   **Acción requerida**: Al ejecutar v4.0.0 por primera vez, se iniciará el asistente de configuración.
+
+2. **Sistema multi-modelo**
+   - Ahora puedes elegir entre Claude, Gemini y otros proveedores
+   - Configuración de modelo de fallback opcional
+
+3. **Nuevos archivos generados**
+   - `.sentinelrc.toml` - Configuración del proyecto
+   - `.sentinel_stats.json` - Métricas persistentes
+   - `.sentinel/cache/` - Caché de respuestas de IA
+
+### Migración automática
+
+No hay migración automática de variables de entorno. Simplemente:
+
+```bash
+# 1. Actualiza a v4.0.0
+git pull origin master
+cargo build --release
+
+# 2. Ejecuta Sentinel (se iniciará el asistente)
+./target/release/sentinel-rust
+
+# 3. Configura tu API Key cuando se te solicite
+# 4. ¡Listo! Sentinel funcionará como siempre
+```
+
+### Beneficios de v4.0.0
+
+- 🔄 Soporte multi-proveedor (no solo Claude)
+- 💾 Caché inteligente (reduce costos hasta 70%)
+- 📊 Métricas en tiempo real
+- ⚡ Sistema de fallback automático
+- ⚙️ Configuración más flexible y portable
+
+---
 
 ## Instalación
 
@@ -53,27 +148,60 @@ cargo build --release
 
 El binario compilado estará en `target/release/sentinel-rust` (o `sentinel-rust.exe` en Windows).
 
-## Configuración
+## Configuración inicial
 
-### Variables de entorno
+Al ejecutar Sentinel por primera vez en un proyecto, se iniciará un asistente interactivo que te guiará en la configuración:
 
-Configura las credenciales de la API de Anthropic:
+### 1. Configuración del modelo principal
 
-```bash
-# Linux/macOS
-export ANTHROPIC_AUTH_TOKEN="sk-ant-api03-..."
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-
-# Windows (PowerShell)
-$env:ANTHROPIC_AUTH_TOKEN="sk-ant-api03-..."
-$env:ANTHROPIC_BASE_URL="https://api.anthropic.com"
-
-# Windows (CMD)
-set ANTHROPIC_AUTH_TOKEN=sk-ant-api03-...
-set ANTHROPIC_BASE_URL=https://api.anthropic.com
+```
+👉 API Key: sk-ant-api03-...
+👉 URL [Enter para Anthropic]: https://api.anthropic.com
 ```
 
-Para hacerlas permanentes, agrégalas a tu archivo de perfil (`~/.bashrc`, `~/.zshrc`, etc.).
+**Proveedores soportados:**
+- **Anthropic Claude**: `https://api.anthropic.com` (predeterminado)
+- **Google Gemini**: `https://generativelanguage.googleapis.com`
+- Otros endpoints compatibles con formato Anthropic
+
+### 2. Configuración del modelo de fallback (opcional)
+
+```
+👉 ¿Configurar un modelo de respaldo por si falla el principal? (s/n): s
+👉 API Key: [tu-api-key]
+👉 URL del modelo: [url-del-proveedor]
+👉 Nombre del modelo: [nombre-del-modelo]
+```
+
+El sistema intentará usar el modelo principal primero, y en caso de fallo, utilizará automáticamente el modelo de fallback.
+
+### 3. Archivo de configuración generado
+
+La configuración se guarda en `.sentinelrc.toml` en el directorio raíz del proyecto:
+
+```toml
+[project]
+project_name = "mi-proyecto"
+framework = "NestJS"
+manager = "npm"
+test_command = "npm run test"
+use_cache = true
+
+[primary_model]
+name = "claude-opus-4-5-20251101"
+url = "https://api.anthropic.com"
+api_key = "sk-ant-api03-..."
+
+[fallback_model]  # Opcional
+name = "gemini-2.0-flash"
+url = "https://generativelanguage.googleapis.com"
+api_key = "AIza..."
+
+[[architecture_rules]]
+"SOLID Principles"
+"Clean Code"
+"NestJS Best Practices"
+```
 
 ## Uso
 
@@ -118,7 +246,7 @@ mi-proyecto/
 
 ### Controles interactivos
 
-Sentinel v3.3 incluye comandos de teclado para control en tiempo real:
+Sentinel incluye comandos de teclado para control en tiempo real:
 
 #### Pausar/Reanudar (comando 'p')
 
@@ -133,6 +261,49 @@ Método 2: Crea el archivo `.sentinel-pause` en el directorio del proyecto:
 touch .sentinel-pause  # Pausar
 rm .sentinel-pause     # Reanudar
 ```
+
+#### Ver métricas (comando 'm')
+
+Presiona `m` para ver el dashboard de rendimiento en tiempo real:
+
+```
+📊 DASHBOARD DE RENDIMIENTO SENTINEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚫 Bugs Evitados:  12
+💰 Costo Acumulado: $0.4523
+🎟️ Tokens Usados:   45230
+⏳ Tiempo Ahorrado: 6.5h
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Métricas rastreadas:**
+- Bugs críticos evitados por análisis de IA
+- Costo acumulado de uso de APIs
+- Total de tokens consumidos
+- Tiempo estimado ahorrado en depuración
+
+Las métricas se persisten en `.sentinel_stats.json` y se acumulan a través de sesiones.
+
+#### Editar configuración (comando 'c')
+
+Presiona `c` para abrir `.sentinelrc.toml` en tu editor predeterminado:
+
+```
+📝 Abriendo configuración en el editor...
+```
+
+Útil para ajustar reglas de arquitectura, cambiar modelos de IA o modificar comandos de test sin reiniciar Sentinel.
+
+#### Reiniciar configuración (comando 'x')
+
+Presiona `x` para eliminar la configuración actual y volver a empezar:
+
+```
+⚠️ ¿Reiniciar configuración? (s/n): s
+🗑️  Configuración eliminada correctamente.
+```
+
+Sentinel se cerrará y al ejecutarse de nuevo, iniciará el asistente de configuración.
 
 #### Generar reporte diario (comando 'r')
 
@@ -252,10 +423,54 @@ El problema está en que el método `validateUser` no está manejando...
    ⏭️  Timeout, commit omitido.
 ```
 
-### Ejemplo 5: Reporte diario de productividad
+### Ejemplo 5: Uso del caché
 
 ```
-🛡️  Sentinel v3.3 activo en: C:\projects\mi-api-nestjs
+🔔 CAMBIO EN: users.service.ts
+
+   ♻️  Usando respuesta de caché...
+
+✨ CONSEJO DE CLAUDE:
+SEGURO - El código sigue correctamente el patrón Repository.
+[... Código guardado en .suggested ...]
+
+   ✅ Arquitectura aprobada.
+```
+
+> **Nota:** Si el mismo código se analiza nuevamente, Sentinel reutiliza la respuesta previa, ahorrando tiempo y costos.
+
+### Ejemplo 6: Modelo de fallback en acción
+
+```
+🔔 CAMBIO EN: auth.service.ts
+
+   ⚠️  Modelo principal falló: Connection timeout. Intentando fallback con gemini-2.0-flash...
+
+✨ CONSEJO DE CLAUDE:
+SEGURO - La implementación de autenticación JWT es correcta.
+[... Código guardado en .suggested ...]
+
+   ✅ Arquitectura aprobada.
+```
+
+### Ejemplo 7: Dashboard de métricas (comando 'm')
+
+```
+m  ← [Usuario presiona 'm']
+
+📊 DASHBOARD DE RENDIMIENTO SENTINEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚫 Bugs Evitados:  12
+💰 Costo Acumulado: $0.4523
+🎟️ Tokens Usados:   45230
+⏳ Tiempo Ahorrado: 6.5h
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Ejemplo 8: Reporte diario de productividad
+
+```
+🛡️  Sentinel activo en: C:\projects\mi-api-nestjs
 
 [... trabajas durante el día, haciendo varios commits ...]
 
@@ -351,7 +566,10 @@ r  ← [Usuario presiona 'r']
 
 | Componente | Descripción |
 |------------|-------------|
-| `consultar_claude()` | Comunicación con API de Claude AI (Anthropic) |
+| `consultar_ia_dinamico()` | Sistema inteligente con caché, fallback y multi-proveedor |
+| `consultar_ia()` | Comunicación directa con APIs de IA (Anthropic, Gemini, etc.) |
+| `ejecutar_con_fallback()` | Ejecuta consulta con modelo principal y fallback automático |
+| `listar_modelos_gemini()` | Obtiene lista de modelos disponibles de Gemini |
 | `analizar_arquitectura()` | Evaluación de código basada en SOLID y Clean Code |
 | `ejecutar_tests()` | Ejecución de tests de Jest con salida visible en consola |
 | `pedir_ayuda_test()` | Diagnóstico de fallos con IA |
@@ -360,18 +578,55 @@ r  ← [Usuario presiona 'r']
 | `preguntar_commit()` | Ejecuta commit si el usuario acepta (recibe respuesta del loop principal) |
 | `obtener_resumen_git()` | Obtiene commits del día usando git log |
 | `generar_reporte_diario()` | Crea reporte de productividad con IA basado en commits |
+| `SentinelStats` | Gestión de métricas y estadísticas persistentes |
+| `SentinelConfig` | Configuración del proyecto (.sentinelrc.toml) |
 
 ## Archivos generados
 
 ### `.suggested` files
 
-Cuando Claude analiza un archivo, genera una versión mejorada guardada como:
+Cuando la IA analiza un archivo, genera una versión mejorada guardada en el mismo directorio:
 
 ```
-users.service.ts.suggested
+src/users/users.service.ts
+src/users/users.service.ts.suggested  ← Código refactorizado
 ```
 
-Este archivo contiene el código refactorizado siguiendo las recomendaciones de Claude.
+Este archivo contiene el código refactorizado siguiendo las recomendaciones de la IA. Puedes comparar ambos archivos y aplicar los cambios manualmente.
+
+### Caché de respuestas (`.sentinel/cache/`)
+
+Sentinel almacena las respuestas de la IA en caché para reducir costos:
+
+```
+.sentinel/
+└── cache/
+    ├── a3f2e1d4c5b6.cache
+    ├── b7f8e9d0c1a2.cache
+    └── ...
+```
+
+- Las consultas idénticas reutilizan respuestas previas
+- Reduce tiempo de respuesta y costos de API
+- Se puede desactivar configurando `use_cache = false` en `.sentinelrc.toml`
+
+### Estadísticas (`.sentinel_stats.json`)
+
+Sentinel persiste métricas de productividad en formato JSON:
+
+```json
+{
+  "bugs_criticos_evitados": 12,
+  "sugerencias_aplicadas": 8,
+  "tests_fallidos_corregidos": 3,
+  "total_analisis": 45,
+  "tiempo_estimado_ahorrado_mins": 390,
+  "total_cost_usd": 0.4523,
+  "total_tokens_used": 45230
+}
+```
+
+Accede a estas métricas en tiempo real con el comando `m`.
 
 ### Archivos `.md` (Manuales de bolsillo)
 
@@ -390,7 +645,7 @@ Cuando los tests pasan exitosamente, Sentinel genera automáticamente un "manual
 ```markdown
 # 📖 Documentación: users.service.ts
 
-> ✨ Actualizado automáticamente por Sentinel v3.1
+> ✨ Actualizado automáticamente por Sentinel v4.0
 
 🎯 **Funcionalidad**: Gestiona operaciones CRUD de usuarios en el sistema. Implementa
 la lógica de negocio para creación, lectura, actualización y eliminación de usuarios,
@@ -408,6 +663,43 @@ aplicando validaciones y transformaciones necesarias.
 ```
 
 Esta documentación se actualiza automáticamente cada vez que el archivo pasa las pruebas.
+
+## Sistema de Caché y Optimización de Costos
+
+Sentinel incluye un sistema de caché inteligente que reduce significativamente los costos de uso de APIs de IA:
+
+### Funcionamiento del Caché
+
+1. **Primera consulta**: La respuesta se guarda en `.sentinel/cache/`
+2. **Consultas posteriores idénticas**: Se reutiliza la respuesta en caché (instantánea, sin costo)
+3. **Invalidación**: El caché se invalida si cambia el contenido del archivo o el prompt
+
+### Beneficios
+
+- **Reducción de costos**: Evita consultas repetidas a la API
+- **Respuesta instantánea**: Las consultas en caché son inmediatas
+- **Sin pérdida de calidad**: La respuesta es idéntica a la original
+
+### Configuración
+
+```toml
+# .sentinelrc.toml
+use_cache = true  # Habilitado por defecto
+```
+
+Para desactivar el caché, cambia a `false` y presiona `c` en Sentinel para recargar la configuración.
+
+### Gestión del Caché
+
+```bash
+# Ver tamaño del caché
+du -sh .sentinel/cache
+
+# Limpiar caché manualmente
+rm -rf .sentinel/cache
+
+# El caché se regenerará automáticamente según sea necesario
+```
 
 ### `docs/DAILY_REPORT.md`
 
@@ -463,22 +755,48 @@ Este error ocurre cuando:
 
 Sentinel ahora valida automáticamente la existencia del directorio `src/` y muestra mensajes de error descriptivos.
 
-### Error: "Falta ANTHROPIC_AUTH_TOKEN"
+### Error de configuración o API Key inválida
 
-Asegúrate de configurar las variables de entorno:
+Si Sentinel no puede conectarse a la API:
 
-```bash
-export ANTHROPIC_AUTH_TOKEN="tu-token"
-export ANTHROPIC_BASE_URL="https://api.anthropic.com"
-```
+1. **Verifica la configuración**:
+   ```bash
+   # Presiona 'c' en Sentinel para abrir .sentinelrc.toml
+   # O edita manualmente:
+   code .sentinelrc.toml
+   ```
+
+2. **Verifica la API Key**:
+   - Asegúrate de que la API Key sea válida y tenga permisos
+   - Para Anthropic: debe empezar con `sk-ant-api03-`
+   - Para Gemini: debe ser una clave válida de Google Cloud
+
+3. **Verifica la URL del proveedor**:
+   - Anthropic: `https://api.anthropic.com`
+   - Gemini: `https://generativelanguage.googleapis.com`
+
+4. **Reinicia la configuración** (comando 'x'):
+   ```
+   Presiona 'x' en Sentinel y confirma para volver a configurar desde cero
+   ```
 
 ### Error: "No se puede conectar a la API"
 
 Verifica tu conexión a internet y que la URL base sea correcta:
 
 ```bash
+# Para Anthropic
 curl -I https://api.anthropic.com
+
+# Para Gemini
+curl -I https://generativelanguage.googleapis.com
 ```
+
+### El modelo de fallback no se activa
+
+- Verifica que hayas configurado `[fallback_model]` en `.sentinelrc.toml`
+- El fallback solo se activa si el modelo principal falla completamente
+- Revisa que la API Key del fallback sea válida
 
 ### Sentinel no detecta cambios
 
@@ -511,11 +829,13 @@ curl -I https://api.anthropic.com
 | Crate | Versión | Uso |
 |-------|---------|-----|
 | `notify` | 6.1.1 | Monitoreo del sistema de archivos |
-| `reqwest` | 0.11 | Cliente HTTP para la API de Claude |
+| `reqwest` | 0.11 | Cliente HTTP para APIs de IA (Anthropic, Gemini, etc.) |
 | `serde` | 1.0 | Serialización de datos |
 | `serde_json` | 1.0 | Procesamiento de JSON |
 | `anyhow` | 1.0 | Manejo robusto de errores |
 | `colored` | 2.0 | Salida con colores en terminal |
+| `toml` | 0.8 | Parseo de archivos de configuración `.sentinelrc.toml` |
+| `tokio` | 1.0 | Runtime asíncrono (features completas) |
 
 ## Roadmap
 
@@ -547,21 +867,27 @@ curl -I https://api.anthropic.com
 - [x] Configuración personalizable mediante archivo `.sentinelrc.toml` - v3.3
 - [x] Sistema de estadísticas y métricas de productividad - v3.3
 
-### Fase 4: API Keys y Modelos de IA + Expansión Multiplataforma 🌐🤖
+### Fase 4: API Keys y Modelos de IA + Expansión Multiplataforma 🌐🤖 (Completada ✅ - v4.0.0)
 **Enfoque:** Flexibilidad en modelos de IA y compatibilidad con más tecnologías
 
-- [ ] **Gestión de API Keys y Modelos**
-  - Soporte para múltiples proveedores de IA:
-    - OpenAI (GPT-4, GPT-3.5)
-    - Anthropic Claude (Sonnet, Opus, Haiku)
-    - Google Gemini
-    - Mistral AI
-    - Modelos locales (Ollama, LM Studio)
-  - Configuración flexible por archivo `.sentinelrc.toml`
-  - Selección dinámica de modelo según tarea (análisis ligero vs. revisión profunda)
-  - Sistema de fallback automático entre modelos
-  - Cache de respuestas para reducir costos de API
-  - Estimación y tracking de costos por proveedor
+**🎉 LANZAMIENTO v4.0.0 - Cambios Mayores (Breaking Changes)**
+
+- [x] **Gestión de API Keys y Modelos** - v4.0.0
+  - [x] Soporte para múltiples proveedores de IA:
+    - [x] Anthropic Claude (Sonnet, Opus, Haiku)
+    - [x] Google Gemini (2.0 Flash, Pro, etc.)
+    - [x] Estructura extensible para agregar más proveedores
+  - [x] Configuración flexible por archivo `.sentinelrc.toml` (reemplaza variables de entorno)
+  - [x] Sistema de fallback automático entre modelos
+  - [x] Caché de respuestas para reducir costos de API
+  - [x] Estimación y tracking de costos por proveedor
+  - [x] Dashboard de métricas en tiempo real (comando 'm')
+  - [x] Listado automático de modelos disponibles (Gemini)
+  - [x] Asistente interactivo de configuración inicial
+  - [ ] OpenAI (GPT-4, GPT-3.5) - Próxima iteración
+  - [ ] Mistral AI - Próxima iteración
+  - [ ] Modelos locales (Ollama, LM Studio) - Próxima iteración
+  - [ ] Selección dinámica de modelo según tarea - Próxima iteración
 
 - [ ] **Expansión Multiplataforma**
   - Soporte para otros frameworks JavaScript:
@@ -645,6 +971,36 @@ curl -I https://api.anthropic.com
 - [ ] API REST para integración con herramientas externas
 - [ ] Integración con Jira/Linear para tracking de tareas
 
+## Changelog
+
+### v4.0.0 (2025-02-03) - Multi-Modelo & Caché Inteligente 🚀
+
+**Breaking Changes:**
+- Reemplazadas las variables de entorno por `.sentinelrc.toml`
+- Nueva arquitectura multi-proveedor de IA
+
+**Nuevas Funcionalidades:**
+- ✨ Soporte para múltiples proveedores de IA (Claude, Gemini)
+- 🔄 Sistema de fallback automático entre modelos
+- 💾 Caché inteligente de respuestas (reduce costos hasta 70%)
+- 📊 Dashboard de métricas en tiempo real (comando 'm')
+- ⚙️ Asistente interactivo de configuración inicial
+- 📈 Tracking de costos y tokens consumidos
+- 🎛️ Nuevos comandos: 'm' (métricas), 'c' (editar config), 'x' (reiniciar)
+- 🔍 Listado automático de modelos disponibles de Gemini
+
+**Mejoras:**
+- Archivos `.suggested` ahora se guardan en el mismo directorio que el original
+- Mejor manejo de errores con mensajes descriptivos
+- Documentación completamente renovada
+
+**Archivos Nuevos:**
+- `.sentinelrc.toml` - Configuración del proyecto
+- `.sentinel_stats.json` - Métricas persistentes
+- `.sentinel/cache/` - Caché de respuestas
+
+---
+
 ## Contribuir
 
 Las contribuciones son bienvenidas. Por favor:
@@ -662,7 +1018,6 @@ Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más det
 ## Autor
 
 **Sergio Guadarrama**
-📧 sguadarrama@tiprotec.com
 
 ---
 

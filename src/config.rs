@@ -3,6 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// Resultado de la detección de framework por IA
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FrameworkDetection {
+    pub framework: String,
+    pub rules: Vec<String>,
+    pub extensions: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModelConfig {
     pub name: String,
@@ -27,6 +35,7 @@ pub struct SentinelConfig {
     pub manager: String,
     pub test_command: String,
     pub architecture_rules: Vec<String>,
+    pub file_extensions: Vec<String>, // Extensiones de archivo a monitorear
     pub ignore_patterns: Vec<String>,
     pub primary_model: ModelConfig,
     pub fallback_model: Option<ModelConfig>,
@@ -34,7 +43,13 @@ pub struct SentinelConfig {
 }
 
 impl SentinelConfig {
-    pub fn default(name: String, manager: String) -> Self {
+    pub fn default(
+        name: String,
+        manager: String,
+        framework: String,
+        rules: Vec<String>,
+        extensions: Vec<String>,
+    ) -> Self {
         let default_model = ModelConfig {
             name: "claude-opus-4-5-20251101".to_string(),
             url: "https://api.anthropic.com".to_string(),
@@ -43,18 +58,20 @@ impl SentinelConfig {
 
         Self {
             project_name: name,
-            framework: "NestJS".to_string(), // Framework por defecto
+            framework,
             manager: manager.clone(),
             test_command: format!("{} run test", manager),
-            architecture_rules: vec![
-                "SOLID Principles".to_string(),
-                "Clean Code".to_string(),
-                "NestJS Best Practices".to_string(),
-            ],
+            architecture_rules: rules,
+            file_extensions: extensions,
             ignore_patterns: vec![
                 "node_modules".to_string(),
                 "dist".to_string(),
                 ".git".to_string(),
+                "build".to_string(),
+                ".next".to_string(),
+                "target".to_string(),
+                "vendor".to_string(),
+                "__pycache__".to_string(),
             ],
             primary_model: default_model,
             fallback_model: None,
@@ -121,15 +138,25 @@ impl SentinelConfig {
     pub fn debe_ignorar(&self, path: &Path) -> bool {
         let path_str = path.to_str().unwrap_or("");
 
-        // 1. Filtros básicos de extensión
-        if !path_str.ends_with(".ts")
-            || path_str.contains(".spec.ts")
+        // 1. Ignorar archivos de tests y sugerencias
+        if path_str.contains(".spec.")
+            || path_str.contains(".test.")
+            || path_str.contains("_test.")
             || path_str.contains(".suggested")
         {
             return true;
         }
 
-        // 2. Filtros personalizados del config (.sentinelrc)
+        // 2. Validar que tenga una extensión permitida
+        let tiene_extension_valida = self.file_extensions.iter().any(|ext| {
+            path_str.ends_with(&format!(".{}", ext))
+        });
+
+        if !tiene_extension_valida {
+            return true;
+        }
+
+        // 3. Filtros personalizados del config (.sentinelrc)
         self.ignore_patterns
             .iter()
             .any(|pattern| path_str.contains(pattern))
@@ -143,6 +170,31 @@ impl SentinelConfig {
         } else {
             "npm".to_string()
         }
+    }
+
+    /// Lista los archivos en la raíz del proyecto (excluyendo node_modules, .git, etc.)
+    pub fn listar_archivos_raiz(path: &Path) -> Vec<String> {
+        let mut archivos = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.flatten() {
+                if let Ok(file_name) = entry.file_name().into_string() {
+                    // Ignorar directorios comunes y archivos ocultos
+                    if !file_name.starts_with('.')
+                        && file_name != "node_modules"
+                        && file_name != "dist"
+                        && file_name != "build"
+                        && file_name != "target"
+                        && file_name != "vendor"
+                    {
+                        archivos.push(file_name);
+                    }
+                }
+            }
+        }
+
+        archivos.sort();
+        archivos
     }
 
     pub fn eliminar(path: &Path) -> anyhow::Result<()> {

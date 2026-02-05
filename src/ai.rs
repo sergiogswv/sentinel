@@ -1,4 +1,4 @@
-use crate::config::{ModelConfig, SentinelConfig};
+use crate::config::{FrameworkDetection, ModelConfig, SentinelConfig};
 use crate::stats::SentinelStats;
 use colored::*;
 use reqwest::blocking::Client;
@@ -292,6 +292,129 @@ fn consultar_anthropic(
         .ok_or_else(|| anyhow::anyhow!("Estructura de Anthropic inesperada. Body: {}", body_text))
 }
 
+/// Detecta el framework y sus reglas usando IA analizando los archivos del proyecto
+pub fn detectar_framework_con_ia(
+    project_path: &Path,
+    config: &SentinelConfig,
+) -> anyhow::Result<FrameworkDetection> {
+    println!("{}", "🤖 Detectando framework con IA...".magenta());
+
+    let archivos = SentinelConfig::listar_archivos_raiz(project_path);
+    let archivos_str = archivos.join("\n");
+
+    let prompt_inicial = format!(
+        "Eres un experto en detectar frameworks y tecnologías de desarrollo.\n\n\
+        ARCHIVOS EN LA RAÍZ DEL PROYECTO:\n{}\n\n\
+        INSTRUCCIONES:\n\
+        1. Analiza los archivos listados para identificar el framework/tecnología principal\n\
+        2. Si necesitas ver el contenido de UN archivo específico para confirmar, responde SOLO: LEER:nombre_archivo\n\
+        3. Si ya puedes determinar el framework, responde INMEDIATAMENTE en formato JSON:\n\
+        {{\n  \
+          \"framework\": \"nombre del framework\",\n  \
+          \"rules\": [\"regla específica 1\", \"regla específica 2\", \"regla específica 3\", \"regla específica 4\"],\n  \
+          \"extensions\": [\"ext1\", \"ext2\", \"ext3\"]\n\
+        }}\n\n\
+        - framework: Nombre del framework/tecnología principal\n\
+        - rules: Principios de arquitectura y buenas prácticas específicas\n\
+        - extensions: Extensiones de archivo principales a monitorear (sin el punto, ej: \"ts\", \"js\", \"py\", \"php\", \"go\")\n\n\
+        IMPORTANTE: Responde SOLO con JSON o LEER:archivo, nada más.",
+        archivos_str
+    );
+
+    // Primera consulta
+    let respuesta = consultar_ia(
+        prompt_inicial,
+        &config.primary_model.api_key,
+        &config.primary_model.url,
+        &config.primary_model.name,
+        Arc::new(Mutex::new(SentinelStats::default())),
+    )?;
+
+    // Si la IA pide leer un archivo
+    if respuesta.trim().starts_with("LEER:") {
+        let archivo = respuesta.trim().replace("LEER:", "").trim().to_string();
+        let archivo_path = project_path.join(&archivo);
+
+        println!("   📄 IA solicita leer: {}", archivo.cyan());
+
+        if let Ok(contenido) = fs::read_to_string(&archivo_path) {
+            // Limitar contenido a primeras 100 líneas para no saturar
+            let contenido_limitado: String = contenido
+                .lines()
+                .take(100)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let prompt_con_contenido = format!(
+                "ARCHIVOS EN LA RAÍZ:\n{}\n\n\
+                CONTENIDO DE '{}':\n{}\n\n\
+                Ahora determina el framework y responde en formato JSON:\n\
+                {{\n  \
+                  \"framework\": \"nombre del framework\",\n  \
+                  \"rules\": [\"regla específica 1\", \"regla específica 2\", \"regla específica 3\", \"regla específica 4\"],\n  \
+                  \"extensions\": [\"ext1\", \"ext2\", \"ext3\"]\n\
+                }}\n\n\
+                - framework: Nombre del framework/tecnología principal\n\
+                - rules: Principios de arquitectura y buenas prácticas específicas\n\
+                - extensions: Extensiones de archivo principales a monitorear (sin el punto)\n\n\
+                IMPORTANTE: Responde SOLO con JSON válido, nada más.",
+                archivos_str, archivo, contenido_limitado
+            );
+
+            let respuesta_final = consultar_ia(
+                prompt_con_contenido,
+                &config.primary_model.api_key,
+                &config.primary_model.url,
+                &config.primary_model.name,
+                Arc::new(Mutex::new(SentinelStats::default())),
+            )?;
+
+            return parsear_deteccion_framework(&respuesta_final);
+        }
+    }
+
+    // Parsear respuesta JSON
+    parsear_deteccion_framework(&respuesta)
+}
+
+/// Parsea la respuesta JSON de la IA con la detección del framework
+fn parsear_deteccion_framework(respuesta: &str) -> anyhow::Result<FrameworkDetection> {
+    // Extraer JSON si está envuelto en texto
+    let json_str = if let Some(inicio) = respuesta.find('{') {
+        if let Some(fin) = respuesta.rfind('}') {
+            &respuesta[inicio..=fin]
+        } else {
+            respuesta
+        }
+    } else {
+        respuesta
+    };
+
+    match serde_json::from_str::<FrameworkDetection>(json_str) {
+        Ok(deteccion) => {
+            println!("   ✅ Framework detectado: {}", deteccion.framework.green());
+            Ok(deteccion)
+        }
+        Err(e) => {
+            // Fallback si falla el parsing
+            println!(
+                "   ⚠️  Error al parsear respuesta de IA: {}",
+                e.to_string().yellow()
+            );
+            Ok(FrameworkDetection {
+                framework: "JavaScript/TypeScript".to_string(),
+                rules: vec![
+                    "Clean Code".to_string(),
+                    "SOLID Principles".to_string(),
+                    "Best Practices".to_string(),
+                    "Code Maintainability".to_string(),
+                ],
+                extensions: vec!["js".to_string(), "ts".to_string()],
+            })
+        }
+    }
+}
+
 /// Obtiene el listado de modelos disponibles en Gemini.
 pub fn listar_modelos_gemini(api_key: &str) -> anyhow::Result<Vec<String>> {
     let url = format!(
@@ -358,14 +481,51 @@ pub fn analizar_arquitectura(
         .collect::<Vec<_>>()
         .join("\n");
 
+    // Determinar el lenguaje para el bloque de código según las extensiones
+    let lenguaje_bloque = if config.file_extensions.contains(&"ts".to_string())
+        || config.file_extensions.contains(&"tsx".to_string())
+    {
+        "typescript"
+    } else if config.file_extensions.contains(&"js".to_string())
+        || config.file_extensions.contains(&"jsx".to_string())
+    {
+        "javascript"
+    } else if config.file_extensions.contains(&"py".to_string()) {
+        "python"
+    } else if config.file_extensions.contains(&"php".to_string()) {
+        "php"
+    } else if config.file_extensions.contains(&"go".to_string()) {
+        "go"
+    } else if config.file_extensions.contains(&"rs".to_string()) {
+        "rust"
+    } else if config.file_extensions.contains(&"java".to_string()) {
+        "java"
+    } else {
+        "code"
+    };
+
     let prompt = format!(
-        "Actúa como un Arquitecto de Software experto en {}. \n\
-        Analiza el archivo '{}' basándote estrictamente en estas reglas:\n\
+        "Actúa como un Arquitecto de Software experto en {}.\n\n\
+        CONTEXTO DEL PROYECTO:\n\
+        - Framework/Tecnología: {}\n\
+        - Archivo a analizar: {}\n\n\
+        REGLAS DE ARQUITECTURA ESPECÍFICAS:\n\
         {}\n\n\
-        REGLAS DE SALIDA: Inicia con 'CRITICO' si hay fallos graves, o 'SEGURO' si está bien.\n\
-        Incluye el código mejorado en un bloque ```typescript.\n\n\
-        Código:\n{}",
-        config.framework, file_name, reglas_str, codigo
+        ANÁLISIS REQUERIDO:\n\
+        Analiza el código siguiente basándote ESTRICTAMENTE en las reglas de arquitectura listadas arriba.\n\
+        Considera las mejores prácticas específicas de {}.\n\n\
+        FORMATO DE RESPUESTA:\n\
+        1. Inicia con 'CRITICO' si hay fallos graves de arquitectura/seguridad, o 'SEGURO' si está bien\n\
+        2. Explica brevemente los problemas encontrados o aspectos positivos\n\
+        3. Incluye el código mejorado en un bloque ```{}\n\n\
+        CÓDIGO A ANALIZAR:\n{}",
+        config.framework,
+        config.framework,
+        file_name,
+        reglas_str,
+        config.framework,
+        lenguaje_bloque,
+        codigo
     );
 
     let respuesta = consultar_ia_dinamico(
@@ -440,11 +600,37 @@ pub fn eliminar_bloques_codigo(texto: &str) -> String {
 }
 
 pub fn extraer_codigo(texto: &str) -> String {
-    if let Some(start) = texto.find("```typescript") {
-        let resto = &texto[start + 13..];
+    // Lista de posibles etiquetas de lenguaje
+    let lenguajes = [
+        "typescript",
+        "javascript",
+        "python",
+        "php",
+        "go",
+        "rust",
+        "java",
+        "jsx",
+        "tsx",
+        "code",
+    ];
+
+    for lenguaje in &lenguajes {
+        let tag = format!("```{}", lenguaje);
+        if let Some(start) = texto.find(&tag) {
+            let resto = &texto[start + tag.len()..];
+            if let Some(end) = resto.find("```") {
+                return resto[..end].trim().to_string();
+            }
+        }
+    }
+
+    // Si no encuentra ningún bloque de código específico, buscar cualquier ```
+    if let Some(start) = texto.find("```") {
+        let resto = &texto[start + 3..];
         if let Some(end) = resto.find("```") {
             return resto[..end].trim().to_string();
         }
     }
+
     texto.to_string()
 }

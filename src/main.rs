@@ -157,7 +157,7 @@ fn main() {
 
     println!(
         "\n{} {}",
-        "🛡️ Sentinel v4.1.1 activo en:".green().bold(),
+        "🛡️ Sentinel v4.4.1 activo en:".green().bold(),
         project_path.display()
     );
 
@@ -205,7 +205,45 @@ fn main() {
 
         let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
 
+        // Si no existen tests, preguntar al usuario si quiere revisión del código
         if !project_path.join(&test_rel_path).exists() {
+            println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
+            println!(
+                "{}",
+                "⚠️  No se encontraron tests para este archivo.".yellow()
+            );
+            print!("🔍 ¿Deseas que revise el código de todas formas? (s/n) [30s timeout]: ");
+            io::stdout().flush().unwrap();
+
+            match leer_respuesta() {
+                Some(respuesta) if respuesta == "s" => {
+                    // Usuario quiere revisión sin tests
+                    if let Ok(codigo) = std::fs::read_to_string(&changed_path) {
+                        match ai::analizar_arquitectura(
+                            &codigo,
+                            &file_name,
+                            Arc::clone(&stats),
+                            &config,
+                            &project_path,
+                            &changed_path,
+                        ) {
+                            Ok(true) => {
+                                println!("   ✅ Código revisado. Sin tests, no se realizará commit automático.");
+                            }
+                            Ok(false) => {
+                                println!("   ⚠️  Se encontraron problemas. Revisa las sugerencias.");
+                            }
+                            Err(e) => {
+                                println!("   ❌ Error al analizar: {}", e);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Timeout o respuesta negativa
+                    println!("   ⏭️  Revisión omitida. Continuando monitoreo...");
+                }
+            }
             continue;
         }
 

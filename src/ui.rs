@@ -149,7 +149,15 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
         .to_str()
         .unwrap()
         .to_string();
-    let mut config = SentinelConfig::default(nombre, gestor);
+
+    // Crear config temporal para poder detectar framework con IA
+    let mut config = SentinelConfig::default(
+        nombre.clone(),
+        gestor.clone(),
+        "Detectando...".to_string(),
+        vec!["Analizando proyecto...".to_string()],
+        vec!["js".to_string(), "ts".to_string()], // Extensiones temporales
+    );
 
     println!(
         "\n{}",
@@ -220,6 +228,37 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
 
         config.fallback_model = Some(fb);
     }
+
+    // 3. Detectar framework con IA
+    println!(
+        "\n{}",
+        "🔍 Detectando framework del proyecto...".bright_cyan().bold()
+    );
+
+    let deteccion = match ai::detectar_framework_con_ia(project_path, &config) {
+        Ok(d) => d,
+        Err(e) => {
+            println!(
+                "   ⚠️  Error al detectar framework: {}. Usando valores por defecto.",
+                e.to_string().yellow()
+            );
+            crate::config::FrameworkDetection {
+                framework: "JavaScript/TypeScript".to_string(),
+                rules: vec![
+                    "Clean Code".to_string(),
+                    "SOLID Principles".to_string(),
+                    "Best Practices".to_string(),
+                    "Code Maintainability".to_string(),
+                ],
+                extensions: vec!["js".to_string(), "ts".to_string()],
+            }
+        }
+    };
+
+    // Actualizar config con framework, reglas y extensiones detectadas
+    config.framework = deteccion.framework;
+    config.architecture_rules = deteccion.rules;
+    config.file_extensions = deteccion.extensions;
 
     let _ = config.save(project_path);
     println!("{}", "✅ Configuración guardada.".green());

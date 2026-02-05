@@ -1,6 +1,10 @@
 # Sentinel 🛡️
 
 <p align="center">
+  <img src="./public/sentinel.jpg" alt="Sentinel Logo" width="100%"/>
+</p>
+
+<p align="center">
   <strong>Elite Productivity Assistant: Multi-Model AI Orchestrator for Architecture Auditing, Autonomous Testing, and Development Observability.</strong>
 </p>
 

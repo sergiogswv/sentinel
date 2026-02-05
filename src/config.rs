@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// Versión actual de Sentinel (leída desde Cargo.toml en tiempo de compilación)
+pub const SENTINEL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Resultado de la detección de framework por IA
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FrameworkDetection {
@@ -30,6 +33,7 @@ impl Default for ModelConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SentinelConfig {
+    pub version: String,
     pub project_name: String,
     pub framework: String,
     pub manager: String,
@@ -57,6 +61,7 @@ impl SentinelConfig {
         };
 
         Self {
+            version: SENTINEL_VERSION.to_string(),
             project_name: name,
             framework,
             manager: manager.clone(),
@@ -130,9 +135,147 @@ impl SentinelConfig {
         Ok(())
     }
 
+    /// Carga la configuración desde el archivo .sentinelrc.toml
+    ///
+    /// Esta función implementa migración automática de configuraciones antiguas
+    /// y es tolerante con campos faltantes, usando valores por defecto.
     pub fn load(path: &Path) -> Option<Self> {
-        let content = fs::read_to_string(path.join(".sentinelrc.toml")).ok()?;
-        toml::from_str(&content).ok()
+        let config_path = path.join(".sentinelrc.toml");
+        let content = fs::read_to_string(&config_path).ok()?;
+
+        // Intentar deserializar directamente primero (configuración actual)
+        if let Ok(mut config) = toml::from_str::<SentinelConfig>(&content) {
+            // Validar y migrar si es necesario
+            if config.version != SENTINEL_VERSION {
+                println!(
+                    "{}",
+                    format!("   🔄 Migrando configuración de versión {} a {}...", config.version, SENTINEL_VERSION).yellow()
+                );
+                config = Self::migrar_config(config, path);
+                // Guardar la configuración migrada
+                let _ = config.save(path);
+                println!("{}", "   ✅ Configuración migrada exitosamente".green());
+            }
+            return Some(config);
+        }
+
+        // Si falla, intentar cargar como configuración antigua (sin campo version)
+        #[derive(Debug, Deserialize)]
+        struct SentinelConfigV1 {
+            project_name: Option<String>,
+            framework: Option<String>,
+            manager: Option<String>,
+            test_command: Option<String>,
+            architecture_rules: Option<Vec<String>>,
+            file_extensions: Option<Vec<String>>,
+            ignore_patterns: Option<Vec<String>>,
+            primary_model: Option<ModelConfig>,
+            fallback_model: Option<ModelConfig>,
+            use_cache: Option<bool>,
+        }
+
+        if let Ok(old_config) = toml::from_str::<SentinelConfigV1>(&content) {
+            println!("{}", "   🔄 Detectada configuración antigua, migrando...".yellow());
+
+            // Crear nueva configuración con valores migrados o defaults
+            let nombre = old_config.project_name.unwrap_or_else(|| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
+
+            let gestor = old_config.manager.unwrap_or_else(|| {
+                Self::detectar_gestor(path)
+            });
+
+            let framework = old_config.framework.unwrap_or_else(|| {
+                "JavaScript/TypeScript".to_string()
+            });
+
+            let rules = old_config.architecture_rules.unwrap_or_else(|| {
+                vec![
+                    "Clean Code".to_string(),
+                    "SOLID Principles".to_string(),
+                    "Best Practices".to_string(),
+                ]
+            });
+
+            let extensions = old_config.file_extensions.unwrap_or_else(|| {
+                vec!["js".to_string(), "ts".to_string()]
+            });
+
+            let mut new_config = Self::default(nombre, gestor, framework, rules, extensions);
+
+            // Preservar valores sensibles de la config antigua
+            if let Some(model) = old_config.primary_model {
+                new_config.primary_model = model;
+            }
+            if let Some(fallback) = old_config.fallback_model {
+                new_config.fallback_model = Some(fallback);
+            }
+            if let Some(cache) = old_config.use_cache {
+                new_config.use_cache = cache;
+            }
+            if let Some(test_cmd) = old_config.test_command {
+                new_config.test_command = test_cmd;
+            }
+            if let Some(patterns) = old_config.ignore_patterns {
+                new_config.ignore_patterns = patterns;
+            }
+
+            // Guardar la configuración migrada
+            let _ = new_config.save(path);
+            println!("{}", "   ✅ Configuración migrada exitosamente".green());
+
+            return Some(new_config);
+        }
+
+        println!(
+            "{}",
+            "   ⚠️  No se pudo cargar la configuración. Se creará una nueva.".yellow()
+        );
+        None
+    }
+
+    /// Migra una configuración de una versión anterior a la versión actual
+    fn migrar_config(mut config: SentinelConfig, _path: &Path) -> SentinelConfig {
+        // Actualizar versión
+        config.version = SENTINEL_VERSION.to_string();
+
+        // Asegurar que todos los campos necesarios existan
+        if config.test_command.is_empty() {
+            config.test_command = format!("{} run test", config.manager);
+        }
+
+        if config.ignore_patterns.is_empty() {
+            config.ignore_patterns = vec![
+                "node_modules".to_string(),
+                "dist".to_string(),
+                ".git".to_string(),
+                "build".to_string(),
+                ".next".to_string(),
+                "target".to_string(),
+                "vendor".to_string(),
+                "__pycache__".to_string(),
+            ];
+        }
+
+        // Asegurar que haya extensiones configuradas
+        if config.file_extensions.is_empty() {
+            config.file_extensions = vec!["js".to_string(), "ts".to_string()];
+        }
+
+        // Asegurar que haya reglas de arquitectura
+        if config.architecture_rules.is_empty() {
+            config.architecture_rules = vec![
+                "Clean Code".to_string(),
+                "SOLID Principles".to_string(),
+                "Best Practices".to_string(),
+            ];
+        }
+
+        config
     }
 
     pub fn debe_ignorar(&self, path: &Path) -> bool {

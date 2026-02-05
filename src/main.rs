@@ -157,7 +157,7 @@ fn main() {
 
     println!(
         "\n{} {}",
-        "🛡️ Sentinel v4.4.1 activo en:".green().bold(),
+        format!("🛡️ Sentinel v{} activo en:", config::SENTINEL_VERSION).green().bold(),
         project_path.display()
     );
 

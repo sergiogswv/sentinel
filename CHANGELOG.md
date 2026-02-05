@@ -5,6 +5,86 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.2] - 2025-02-05
+
+### 🐛 Fixed
+
+- **Bug crítico de configuración**: Resuelto el problema donde la configuración no se leía correctamente al hacer cambios en el proyecto
+  - Antes: Al modificar el proyecto, Sentinel pedía reconfigurar desde cero
+  - Ahora: La configuración persiste correctamente entre sesiones
+
+### ✨ Added
+
+- **Sistema de versiones de configuración**: Agregado campo `version` en `.sentinelrc.toml`
+  - Permite rastrear la versión de formato de configuración
+  - Facilita migraciones automáticas en futuras versiones
+- **Migración automática de configuraciones**:
+  - Detecta configuraciones antiguas (sin campo `version`) y las migra automáticamente
+  - Preserva API keys y configuraciones personalizadas
+  - Valida y completa campos faltantes con valores por defecto apropiados
+- **Versión dinámica**: La versión de Sentinel ahora se lee desde `Cargo.toml` usando `env!("CARGO_PKG_VERSION")`
+  - Single source of truth para la versión
+  - No más versiones harcodeadas en el código
+  - La constante `SENTINEL_VERSION` se usa en todo el proyecto
+
+### 🔧 Changed
+
+- **Carga robusta de configuración**: La función `load()` ahora:
+  - Intenta deserializar con el formato actual
+  - Si falla, intenta con formato antiguo (compatibilidad backward)
+  - Migra automáticamente y guarda la configuración actualizada
+  - Muestra mensajes claros durante el proceso de migración
+- **Validación de configuración**: Campos faltantes se completan automáticamente:
+  - `test_command`: Si está vacío, usa `{manager} run test`
+  - `ignore_patterns`: Si está vacío, usa patrones por defecto
+  - `file_extensions`: Si está vacío, usa `["js", "ts"]`
+  - `architecture_rules`: Si está vacío, usa reglas por defecto
+
+### 📝 Documentation
+
+- **MIGRATION.md**: Nueva guía completa de migración de configuraciones
+  - Explicación detallada del problema resuelto
+  - Diagrama de flujo del proceso de migración
+  - Ejemplos de configuraciones antes/después
+  - Guía de testing del sistema de migración
+- **CHANGELOG.md**: Actualizado con todos los cambios de v4.4.2
+- **README.md**: Badge de versión actualizado a 4.4.2
+
+### 🏗️ Internal Changes
+
+- Nueva constante pública `config::SENTINEL_VERSION` para acceso a la versión desde cualquier módulo
+- Función privada `migrar_config()` para manejar actualizaciones de versión
+- Estructura auxiliar `SentinelConfigV1` para deserialización de configs antiguas
+
+### 💡 Use Cases
+
+**Antes (v4.4.1):**
+```
+Usuario modifica proyecto
+→ Sentinel no puede leer .sentinelrc.toml
+→ Pide reconfigurar API keys y todo desde cero
+→ 😞 Frustración, pérdida de tiempo
+```
+
+**Ahora (v4.4.2):**
+```
+Usuario modifica proyecto
+→ Detecta versión de config
+→ Si es antigua, migra automáticamente
+→ Si faltan campos, los completa con defaults
+→ Preserva API keys y configuración personalizada
+→ 😊 Configuración lista sin intervención
+```
+
+### 🔄 Migration
+
+- **No requiere acción del usuario**: La migración es completamente automática
+- **Preservación de datos**: API keys y configuraciones personalizadas se mantienen
+- **Actualización transparente**: El archivo `.sentinelrc.toml` se actualiza automáticamente
+- **Mensajes informativos**: Usuario ve cuando se realiza una migración
+
+---
+
 ## [4.2.0] - 2025-02-04
 
 ### ✨ Added

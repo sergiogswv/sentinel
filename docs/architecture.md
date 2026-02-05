@@ -129,6 +129,7 @@ loop {
 
 | Component | Description |
 |-----------|-------------|
+| `detectar_archivo_padre()` | Detects if a modified file is a child of a parent module (e.g., `.service.ts`) |
 | `consultar_ia_dinamico()` | Intelligent system with cache, fallback, and multi-provider support |
 | `consultar_ia()` | Direct communication with AI APIs (Anthropic, Gemini, etc.) |
 | `ejecutar_con_fallback()` | Executes query with primary model and automatic fallback |
@@ -211,6 +212,42 @@ consultar_ia_dinamico()
 - Real-time console output
 - 30-second timeout
 - Error capture for AI diagnosis
+
+---
+
+### Parent File Detection (v4.2.0)
+
+**Purpose:** Automatically detect if a modified file is part of a larger module
+
+**When a file is modified:**
+1. Check if it's a "child" file (e.g., `call-inbound.ts`, `user.dto.ts`)
+2. Search for parent files in the same directory (`.service.ts`, `.controller.ts`, etc.)
+3. If found, use parent module name for test execution
+4. If not found, use current file name (backward compatible)
+
+**Supported Parent Patterns:**
+- `.service.ts` - NestJS services (highest priority - business logic)
+- `.controller.ts` - HTTP endpoints
+- `.repository.ts` - Data access
+- `.gateway.ts` - WebSocket gateways
+- `.module.ts` - NestJS modules
+- `.guard.ts`, `.interceptor.ts`, `.pipe.ts`, `.filter.ts` - Other NestJS components
+
+**Priority Order:**
+When multiple parent files exist, uses this priority:
+1. Service → 2. Controller → 3. Repository → 4. Gateway → 5. Module → 6. Others
+
+**Example:**
+```
+Modified: src/calls/call-inbound.ts
+Parent detected: src/calls/call.service.ts
+Test executed: test/calls/calls.spec.ts (parent module test)
+```
+
+**Benefits:**
+- Better test coverage for child files
+- Detects regressions in the entire module
+- Maintains backward compatibility when no parent exists
 
 ---
 
@@ -305,7 +342,8 @@ sentinel-rust/
 │   ├── stats.rs          # Metrics tracking
 │   ├── tests.rs          # Test execution
 │   ├── git.rs            # Git operations
-│   └── docs.rs           # Documentation generation
+│   ├── docs.rs           # Documentation generation
+│   └── files.rs          # Parent file detection utilities
 ├── target/
 │   └── release/
 │       └── sentinel-rust # Compiled binary

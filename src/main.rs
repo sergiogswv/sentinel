@@ -18,6 +18,7 @@ use std::time::Instant;
 mod ai;
 mod config;
 mod docs;
+mod files;
 mod git;
 mod stats;
 mod tests;
@@ -186,7 +187,22 @@ fn main() {
             .to_str()
             .unwrap()
             .to_string();
-        let base_name = file_name.split('.').next().unwrap();
+
+        // Intentar detectar si este archivo es un hijo de un servicio/módulo padre
+        let base_name = match files::detectar_archivo_padre(&changed_path, &project_path) {
+            Some(padre) => {
+                println!(
+                    "   ℹ️  Archivo hijo detectado, usando tests del módulo: {}",
+                    padre.yellow()
+                );
+                padre
+            }
+            None => {
+                // Usar el nombre del archivo actual
+                file_name.split('.').next().unwrap().to_string()
+            }
+        };
+
         let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
 
         if !project_path.join(&test_rel_path).exists() {

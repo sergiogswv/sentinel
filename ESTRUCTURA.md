@@ -12,9 +12,10 @@ src/
 ├── ai.rs          # Comunicación con Claude AI
 ├── config.rs      # Gestión de configuración (.sentinelrc.toml)
 ├── docs.rs        # Generación de documentación
+├── files.rs       # Utilidades de detección de archivos padres
 ├── git.rs         # Operaciones de Git
 ├── stats.rs       # Estadísticas y métricas de productividad
-├── tests.rs       # Ejecución y diagnóstico de tests
+├── tests.rs       # Ejecución y diagn��stico de tests
 └── ui.rs          # Interfaz de usuario y validación de proyectos
 ```
 
@@ -126,6 +127,44 @@ src/
 
 **Dependencias**:
 - `crate::ai` - Para generar resúmenes técnicos
+
+---
+
+### `files.rs`
+**Responsabilidad**: Detección de archivos padres en módulos NestJS
+
+**Funciones públicas**:
+- `es_archivo_padre(file_name: &str) -> bool`
+  - Verifica si un archivo es de tipo padre (.service.ts, .controller.ts, etc.)
+  - Patrones soportados: service, controller, repository, module, gateway, guard, interceptor, pipe, filter
+
+- `detectar_archivo_padre(changed_path: &Path, project_path: &Path) -> Option<String>`
+  - Detecta si un archivo modificado es un "hijo" de un módulo padre
+  - Busca archivos padres en el mismo directorio
+  - Si hay múltiples padres, retorna el de mayor prioridad (service > controller > repository > ...)
+  - Retorna `Some(nombre_base)` o `None` si no hay padre
+
+**Prioridad de padres** (de mayor a menor):
+1. `.service.ts` - Lógica de negocio
+2. `.controller.ts` - Endpoints HTTP
+3. `.repository.ts` - Acceso a datos
+4. `.gateway.ts` - WebSockets
+5. `.module.ts` - Módulos NestJS
+6. `.guard.ts`, `.interceptor.ts`, `.pipe.ts`, `.filter.ts` - Otros
+
+**Casos de uso**:
+- Archivo modificado: `src/calls/call-inbound.ts`
+- Padre detectado: `src/calls/call.service.ts`
+- Test a ejecutar: `test/calls/calls.spec.ts` (del módulo padre, no del hijo)
+
+**Dependencias**:
+- `std::fs` - Lectura de directorios
+- `std::path` - Manipulación de rutas
+
+**Tests unitarios**:
+- Incluye tests completos para verificación de patrones de archivo
+- Pruebas de archivos con puntos en el nombre
+- Validación de prioridades
 
 ---
 
@@ -255,6 +294,10 @@ pub struct SentinelStats {
 └──────┬───────────────────────────────────────────────────────┘
        │
        ├──▶ config::debe_ignorar()  (filtrado de archivos según config)
+       │
+       ├──▶ files::detectar_archivo_padre()  (detección de módulo padre - v4.2.0)
+       │         └──▶ Si es hijo, usa nombre del padre para tests
+       │         └──▶ Si no es hijo, usa nombre del archivo actual
        │
        ├──▶ ai::analizar_arquitectura()  (consejo en consola, código en .suggested)
        │         └──▶ stats::incrementar_bugs_evitados() [si crítico]

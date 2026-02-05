@@ -5,6 +5,68 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2025-02-04
+
+### ✨ Added
+
+- **Detección automática de archivos padres**: Sentinel ahora detecta cuando un archivo modificado es parte de un módulo más grande
+  - Ejemplo: Al modificar `src/calls/call-inbound.ts`, detecta que `src/calls/call.service.ts` es el módulo padre
+  - Ejecuta los tests del módulo padre: `test/calls/calls.spec.ts` en lugar de buscar tests para el archivo hijo
+  - Soporta múltiples patrones de archivos padres: `.service.ts`, `.controller.ts`, `.repository.ts`, `.module.ts`, `.gateway.ts`, `.guard.ts`, `.interceptor.ts`, `.pipe.ts`, `.filter.ts`
+
+### 🔧 Changed
+
+- **Lógica de detección de tests**: Ahora busca el módulo padre antes de determinar qué tests ejecutar
+- **Notificación al usuario**: Muestra un mensaje informativo cuando detecta un archivo hijo y usa los tests del módulo padre
+
+### 🎯 Improved
+
+- **Mejor cobertura de tests**: Los archivos hijos ahora ejecutan los tests completos del módulo, detectando regresiones
+- **Prioridad inteligente**: Cuando existen múltiples archivos padres, usa el siguiente orden de prioridad:
+  1. `.service.ts` (lógica de negocio - máxima prioridad)
+  2. `.controller.ts` (endpoints HTTP)
+  3. `.repository.ts` (acceso a datos)
+  4. `.gateway.ts` (WebSockets)
+  5. `.module.ts` (módulos NestJS)
+  6. Otros (*.guard.ts, *.interceptor.ts, etc.)
+
+### 📁 New Files
+
+- `src/files.rs` - Módulo con utilidades para detección de archivos padres
+  - `es_archivo_padre()` - Verifica si un archivo coincide con patrones de padre
+  - `detectar_archivo_padre()` - Busca padres en el mismo directorio con prioridad
+
+### 📝 Documentation
+
+- **ESTRUCTURA.md**: Agregada documentación del módulo `files.rs`
+- **docs/architecture.md**: Actualizado el flujo de datos con detección de padres
+
+### 🧪 Testing
+
+- **Tests unitarios completos**: El módulo `files.rs` incluye tests para:
+  - Verificación de todos los patrones de archivos padres
+  - Archivos con puntos en el nombre (ej: `user-v2.dto.ts`)
+  - Casos edge: múltiples padres, sin padres, carpetas vacías
+
+### 💡 Use Cases
+
+**Antes (v4.1.1):**
+```
+Archivo modificado: src/calls/call-inbound.ts
+Test buscado: test/call-inbound/call-inbound.spec.ts (no existe)
+Resultado: ❌ No se ejecutan tests
+```
+
+**Ahora (v4.2.0):**
+```
+Archivo modificado: src/calls/call-inbound.ts
+Padre detectado: src/calls/call.service.ts ℹ️
+Test ejecutado: test/calls/calls.spec.ts ✅
+Resultado: ✅ Tests del módulo completo ejecutados
+```
+
+---
+
 ## [4.1.1] - 2025-02-03
 
 ### ✨ Added

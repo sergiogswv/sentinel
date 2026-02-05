@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.1.1-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.2.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -26,6 +26,7 @@ Real-time monitoring tool written in **Rust** that analyzes code changes using *
 - 💾 **Smart Caching** - Reduces API costs up to 70%
 - 📊 **Real-time Metrics** - Tracking bugs, costs, tokens, and productivity
 - 🧪 **Automatic Tests** - Runs Jest with real-time output
+- 🎯 **Parent File Detection** - Automatically finds parent modules for comprehensive testing
 - 📚 **Auto-documentation** - Generates technical manuals automatically
 - 📈 **Daily Reports** - Intelligent commit summaries
 - 🔒 **Security** - Automatic API key protection in `.gitignore`
@@ -102,23 +103,24 @@ Once started, Sentinel responds to these commands:
 ## 🎯 Quick Example
 
 ```bash
-# Sentinel detects a change in your code
-🔔 CAMBIO EN: users.service.ts
+# Sentinel detects a change in a child file
+🔔 CAMBIO EN: call-inbound.ts
+   ℹ️  Archivo hijo detectado, usando tests del módulo: call
 
 ✨ CONSEJO DE CLAUDE:
 SEGURO - El código sigue correctamente el patrón Repository.
 
    ✅ Arquitectura aprobada.
-🧪 Ejecutando tests: test/users/users.spec.ts
+🧪 Ejecutando tests: test/calls/calls.spec.ts
 
- PASS  test/users/users.spec.ts
+ PASS  test/calls/calls.spec.ts
   ✓ should create user (12 ms)
   ✓ should find user by id (8 ms)
 
    ✅ Tests pasados con éxito
 
 📚 Actualizando manual de bolsillo...
-   ✅ Documento generado: src/users/users.service.md
+   ✅ Documento generado: src/calls/call.service.md
 
 🚀 Mensaje: feat: add user validation in create method
 📝 ¿Commit? (s/n): s
@@ -139,6 +141,9 @@ Sentinel automatically protects your API keys:
 ---
 
 ## 🌟 Highlighted Features
+
+### Parent File Detection
+When you modify a child file (e.g., `call-inbound.ts`), Sentinel automatically detects the parent module (`call.service.ts`) and runs the complete module tests for better coverage.
 
 ### Multi-Model System
 Use Claude for deep analysis and Gemini as fast fallback. Switch providers without restarting.
@@ -171,10 +176,12 @@ Contributions are welcome! Please:
 Phase 1: ✅ Completed - Monitoring and basic analysis
 Phase 2: ✅ Completed - Productivity and documentation
 Phase 3: ✅ Completed - Optimization and stability
-Phase 4: ✅ Completed - Multi-model AI (v4.0.0)
-Phase 5: ⏳ In progress - Security (SecOps)
-Phase 6: 📅 Planned - PR Review Mode
-Phase 7: 📅 Planned - Enterprise scalability
+Phase 4: ✅ Completed - Multi-model AI & Parent file detection (v4.2.0)
+Phase 5: 🚧 Planned - Multi-platform support (frameworks & languages)
+  → Sub-phase: 🌐 New AI Models (OpenAI, Mistral, Local models)
+Phase 6: 📅 Planned - Security (SecOps)
+Phase 7: 📅 Planned - PR Review Automation (Elite)
+Phase 8: 📅 Planned - Enterprise & scalability
 ```
 
 [View complete roadmap →](docs/roadmap.md)

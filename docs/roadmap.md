@@ -105,8 +105,64 @@ Sentinel's development roadmap with completed features and future plans.
   - Sistema de prioridad inteligente (service > controller > repository > ...)
 - [x] **Mejor cobertura de tests**: Los archivos hijos ejecutan tests del módulo completo
 - [x] **Módulo `files.rs`**: Utilidades especializadas para detección de padres
+- [x] **Jerarquía de archivos**: Sistema inteligente para organización de archivos en la misma carpeta
 
-**Current Version:** v4.2.0
+### Detección Inteligente de Frameworks con IA (v4.4.1) 🤖
+
+- [x] **Sistema de detección automática de frameworks**:
+  - Analiza archivos en la raíz del proyecto (`package.json`, `composer.json`, `requirements.txt`, etc.)
+  - Consulta a la IA para identificar framework/tecnología principal
+  - Protocolo inteligente: La IA puede solicitar leer archivos específicos si necesita más contexto
+  - Retorna framework detectado, reglas de arquitectura específicas y extensiones de archivo
+
+- [x] **Estructura `FrameworkDetection`**:
+  - `framework`: Nombre del framework/tecnología detectada (NestJS, Laravel, Django, Go, etc.)
+  - `rules`: Reglas de arquitectura y buenas prácticas específicas del framework
+  - `extensions`: Extensiones de archivo a monitorear dinámicamente (ts, js, py, php, go, rs, java, etc.)
+
+- [x] **Validación dinámica de código según framework**:
+  - Análisis de arquitectura adaptado al framework detectado
+  - Prompts contextualizados con mejores prácticas específicas
+  - Detección automática del lenguaje para bloques de código (TypeScript, Python, PHP, Go, Rust, Java)
+  - Extracción inteligente de código en múltiples lenguajes
+
+- [x] **Configuración dinámica de extensiones**:
+  - Campo `file_extensions` en `.sentinelrc.toml`
+  - Validación automática de extensiones permitidas
+  - Filtrado inteligente de archivos según framework detectado
+  - Soporte para múltiples lenguajes de programación
+
+- [x] **Proceso de inicialización mejorado**:
+  - Detección de framework automática durante configuración inicial
+  - Actualización de reglas de arquitectura según framework
+  - Configuración de extensiones de archivo personalizadas
+  - Guardado automático en `.sentinelrc.toml`
+
+- [x] **Método `listar_archivos_raiz()`**:
+  - Utilidad para analizar estructura del proyecto
+  - Excluye directorios comunes (node_modules, dist, build, target, vendor, __pycache__)
+  - Proporciona contexto a la IA para detección precisa
+
+### Gestión de Configuración y Estabilidad (v4.4.0 - v4.4.2) 🔧
+
+- [x] **Sistema de versiones de configuración** (v4.4.2):
+  - Campo `version` en `.sentinelrc.toml` para rastrear formato de configuración
+  - Facilita migraciones automáticas en futuras versiones
+  - Single source of truth con `SENTINEL_VERSION` desde `Cargo.toml`
+- [x] **Migración automática de configuraciones** (v4.4.2):
+  - Detecta configuraciones antiguas (sin campo `version`) y las migra automáticamente
+  - Preserva API keys y configuraciones personalizadas
+  - Valida y completa campos faltantes con valores por defecto
+  - Mensajes informativos durante el proceso de migración
+- [x] **Carga robusta de configuración** (v4.4.2):
+  - Backward compatibility con formatos antiguos
+  - Validación automática de campos requeridos
+  - Completado inteligente de configuración faltante
+- [x] **Versión dinámica**: La versión se lee desde `Cargo.toml` usando `env!("CARGO_PKG_VERSION")`
+  - Elimina versiones hardcodeadas en el código
+  - Constante `SENTINEL_VERSION` disponible en todo el proyecto
+
+**Current Version:** v4.4.2
 
 **Key Achievements:**
 - Multi-provider AI support with intelligent fallback
@@ -116,131 +172,58 @@ Sentinel's development roadmap with completed features and future plans.
 - Secure credential management
 - Parent file detection for comprehensive testing
 - Interactive configuration wizard
+- **AI-powered framework detection and dynamic validation**
+- **Multi-language support (TypeScript, Python, PHP, Go, Rust, Java, etc.)**
+- **Context-aware code analysis adapted to detected framework**
+- Automatic configuration migration system
+- Robust configuration loading with backward compatibility
+- Dynamic file extension filtering based on project technology
 
 ---
 
-## 🌐 Conexión a Nuevos Modelos de IA (En Progreso 🚧)
+## 🌐 Expansión del Ecosistema de IA (En Evaluación 🔍)
 
-**Enfoque:** Expansión del ecosistema de IA soportado
+**Enfoque:** Evaluación de compatibilidad con proveedores adicionales de IA
 
-### Próximos Proveedores (Prioridad Alta)
+Actualmente se encuentra en proceso de evaluación la viabilidad técnica y estratégica de ampliar el soporte a proveedores de IA adicionales mediante integración basada en API keys. Esta expansión permitiría a los usuarios seleccionar entre diferentes proveedores según sus necesidades específicas de:
 
-- [ ] **OpenAI** 🟢
-  - GPT-4 Turbo / GPT-4 Vision
-  - GPT-3.5 Turbo (opción económica)
-  - o1 / o1-mini (razonamiento avanzado)
-  - Integración con OpenAI API
+- **Rendimiento y velocidad**: Modelos optimizados para inferencia rápida
+- **Costos y escalabilidad**: Opciones económicas para equipos de diferentes tamaños
+- **Privacidad y seguridad**: Soluciones self-hosted y on-premise
+- **Especialización**: Modelos específicamente entrenados para análisis de código
 
-- [ ] **Mistral AI** 🟡
-  - Mistral 7B / Mistral Large
-  - Mixtral 8x7B (mixture of experts)
-  - Codestral (especializado en código)
-  - Opción de modelos locales y cloud
+### Áreas de Investigación
 
-- [ ] **Meta Llama** 🟡
-  - Llama 3.1 (8B, 70B, 405B)
-  - Llama 3.2 (multimodal)
-  - A través de proveedores (Groq, Anyscale, Together)
+- [ ] **Arquitectura extensible de proveedores**:
+  - Sistema de plugins para integración de nuevos proveedores
+  - Interfaz unificada para abstracción de APIs heterogéneas
+  - Gestión centralizada de credenciales multi-proveedor
 
-- [ ] **Cohere** 🔵
-  - Command R / R+
-  - Especializados en RAG y herramientas
-  - Soporte para citas y referencias
+- [ ] **Selección inteligente de modelos**:
+  - Enrutamiento automático según tipo de tarea y contexto
+  - Optimización de costos mediante selección dinámica
+  - Sistema de fallback multi-nivel entre proveedores
 
-### Modelos Locales y Self-Hosted
+- [ ] **Compatibilidad con soluciones empresariales**:
+  - Evaluación de proveedores enterprise (Azure OpenAI, AWS Bedrock)
+  - Soporte para modelos self-hosted y on-premise
+  - Integración con plataformas de inferencia especializadas
 
-- [ ] **Ollama** 💻
-  - Integración con API local de Ollama
-  - Soporte para Llama, Mistral, Gemma, phi
-  - Sin costos de API
-  - Privacidad total de código
+**Target Release:** v4.5.0 - v5.0.0 (Sujeto a evaluación)
 
-- [ ] **LM Studio** 💻
-  - Conexión a servidor local
-  - Modelos GGUF variados
-  - Interfaz gráfica de gestión
-
-- [ ] **LocalAI** 💻
-  - OpenAI-compatible API local
-  - Soporte para múltiples modelos
-  - Sin dependencias de servicios externos
-
-- [ ] **vLLM** 🚀
-  - Inferencia de alta velocidad
-  - Batch processing optimizado
-  - Ideal para despliegues on-premise
-
-### Modelos Especializados en Código
-
-- [ ] **CodeLlama** 💻
-  - CodeLlama 13B/34B
-  - Especializado en Python, JS, etc.
-  - Completado de código
-
-- [ ] **DeepSeek Coder** 🇨🇳
-  - Modelo open-source competitivo
-  - Soporte para múltiples lenguajes
-  - Opción económica y potente
-
-- [ ] **StarCoder** 🌟
-  - StarCoder 2 (3B, 7B, 15B)
-  - Entrenado en código abierto
-  - Licencia permissiva
-
-### Plataformas de Inferencia
-
-- [ ] **Groq** ⚡
-  - LPUs (Language Processing Units)
-  - Inferencia ultra-rápida
-  - Soporte para Llama, Mixtral
-
-- [ ] **Together AI** 🤝
-  - API unificada para múltiples modelos
-  - Fine-tuning customizado
-  - Optimización de costos
-
-- [ ] **Anyscale** ☁️
-  - Plataforma para Ray y Llama
-  - Escalabilidad automática
-  - Enterprise-grade
-
-- [ ] **Fireworks AI** 🎆
-  - Inferencia rápida y económica
-  - Modelos optimizados
-  - Sin lock-in
-
-### Características Avanzadas
-
-- [ ] **Selección dinámica de modelo según tarea**:
-  - Archivo pequeño → Modelo rápido (Haiku, Flash)
-  - Archivo grande → Modelo potente (Sonnet, GPT-4)
-  - Test diagnosis → Modelo especializado
-  - Commit messages → Modelo económico
-
-- [ ] **A/B testing de modelos**:
-  - Comparar calidad de respuestas
-  - Métricas de satisfacción del usuario
-  - Optimización automática de costos
-
-- [ ] **Modelos multimodales**:
-  - Análisis de imágenes (diagramas, screenshots)
-  - Procesamiento de PDFs técnicos
-  - Generación de diagramas desde código
-
-**Target Release:** v4.3.0 - v4.5.0 (Rolling updates)
-
-**Benefits:**
-- Mayor disponibilidad (menos dependencias)
-- Redundancia en caso de caídas
-- Opciones económicas y premium
-- Soporte para modelos locales (privacidad)
-- Inferencia ultra-rápida (Groq LPUs)
+**Beneficios Proyectados:**
+- Reducción de dependencia de un único proveedor
+- Flexibilidad para adaptarse a diferentes requisitos de compliance
+- Optimización de costos operacionales
+- Mayor disponibilidad mediante redundancia de proveedores
 
 ---
 
-## Fase 5: Expansión Multiplataforma (Planificada 🚧)
+## Fase 5: Expansión Multiplataforma (En Progreso 🚧)
 
-**Enfoque:** Soporte para más frameworks y lenguajes de programación
+**Enfoque:** Soporte especializado para frameworks y lenguajes de programación adicionales
+
+**Estado Actual:** Sentinel ya cuenta con detección automática de frameworks por IA (v4.4.1) que identifica y adapta las validaciones a diferentes tecnologías. Las siguientes mejoras buscan agregar reglas especializadas y patrones específicos por framework.
 
 ### Soporte para Frameworks JavaScript/TypeScript
 
@@ -344,46 +327,58 @@ Sentinel's development roadmap with completed features and future plans.
 
 ### Soporte para Otros Lenguajes
 
-- [ ] **Python** 🐍
-  - pytest integration
-  - Django best practices
-  - FastAPI patterns
-  - Flask blueprints
-  - Pydantic models
-  - Type hints validation
+- [x] **Python** 🐍 *(Detección básica implementada)*
+  - [x] Detección de frameworks (Django, FastAPI, Flask)
+  - [x] Validación de extensiones `.py`
+  - [ ] pytest integration especializada
+  - [ ] Reglas específicas de Django/FastAPI/Flask
+  - [ ] Validación de Pydantic models
+  - [ ] Type hints validation avanzada
 
-- [ ] **Go** 🔵
-  - testing package
-  - Table-driven tests
-  - Go idioms y patterns
-  - Interfaces y composition
-  - Goroutines y channels
+- [x] **Go** 🔵 *(Detección básica implementada)*
+  - [x] Detección de proyectos Go
+  - [x] Validación de extensiones `.go`
+  - [ ] testing package integration
+  - [ ] Table-driven tests patterns
+  - [ ] Go idioms validation
+  - [ ] Goroutines y channels best practices
 
-- [ ] **Java** ☕
-  - JUnit 5 integration
-  - Spring Boot patterns
-  - Maven/Gradle support
-  - Mockito testing
-  - Dependency Injection
+- [x] **Java** ☕ *(Detección básica implementada)*
+  - [x] Detección de proyectos Java
+  - [x] Validación de extensiones `.java`
+  - [ ] JUnit 5 integration
+  - [ ] Spring Boot patterns validation
+  - [ ] Maven/Gradle support
+  - [ ] Mockito testing patterns
 
 - [ ] **C#** 🟣
-  - xUnit/NUnit integration
-  - ASP.NET Core patterns
-  - Entity Framework
-  - Dependency Injection
-  - Async/await patterns
+  - [ ] Detección de proyectos .NET
+  - [ ] xUnit/NUnit integration
+  - [ ] ASP.NET Core patterns
+  - [ ] Entity Framework validation
+  - [ ] Dependency Injection patterns
 
 - [ ] **Ruby** ❤️
-  - RSpec testing
-  - Rails conventions
-  - Sinatra patterns
-  - Rake tasks
+  - [ ] Detección de proyectos Ruby
+  - [ ] RSpec testing
+  - [ ] Rails conventions
+  - [ ] Sinatra patterns
 
-- [ ] **PHP** 🐘
-  - PHPUnit integration
-  - Laravel patterns
-  - Symfony architecture
-  - PSR standards
+- [x] **PHP** 🐘 *(Detección básica implementada)*
+  - [x] Detección de proyectos PHP
+  - [x] Validación de extensiones `.php`
+  - [ ] PHPUnit integration
+  - [ ] Laravel patterns validation
+  - [ ] Symfony architecture rules
+  - [ ] PSR standards enforcement
+
+- [x] **Rust** 🦀 *(Detección básica implementada)*
+  - [x] Detección de proyectos Rust (Cargo.toml)
+  - [x] Validación de extensiones `.rs`
+  - [ ] cargo test integration
+  - [ ] Rust idioms validation
+  - [ ] Ownership y borrowing analysis
+  - [ ] async/await patterns
 
 **Target Release:** v5.0.0
 
@@ -773,15 +768,14 @@ Explorando tecnologías de vanguardia:
 
 ## Cronograma de Releases (Tentativo)
 
-| Versión | Fecha Estimada | Enfoque |
-|---------|----------------|---------|
-| v4.3.0 | Q1 2025 | Nuevos modelos IA (OpenAI, Mistral) |
-| v4.4.0 | Q1 2025 | Modelos locales (Ollama, LM Studio) |
-| v4.5.0 | Q2 2025 | Plataformas inferencia (Groq, Together AI) |
-| v5.0.0 | Q2 2025 | Expansión multiplataforma (frameworks y lenguajes) |
-| v6.0.0 | Q3 2025 | Características SecOps |
-| v7.0.0 | Q4 2025 | PR review automation |
-| v8.0.0 | Q1 2026 | Enterprise features |
+| Versión | Fecha Estimada | Enfoque | Estado |
+|---------|----------------|---------|--------|
+| v4.4.2 | Feb 2025 | Configuration Management & Stability | ✅ Completado |
+| v4.5.0 | Q1-Q2 2025 | Evaluación de compatibilidad con proveedores de IA adicionales | 🔍 En evaluación |
+| v5.0.0 | Q2-Q3 2025 | Expansión multiplataforma (frameworks y lenguajes) | 📋 Planificado |
+| v6.0.0 | Q3-Q4 2025 | Características SecOps | 📋 Planificado |
+| v7.0.0 | Q4 2025 | PR review automation | 📋 Planificado |
+| v8.0.0 | Q1 2026 | Enterprise features | 📋 Planificado |
 
 > **Nota:** Las fechas son estimaciones y pueden cambiar según el progreso del desarrollo y feedback de la comunidad.
 
@@ -803,9 +797,9 @@ Ver [Contributing Guide](../CONTRIBUTING.md) para más detalles.
 
 ## Versión Actual
 
-**📦 Current Release:** v4.2.0 (Parent File Detection)
+**📦 Current Release:** v4.4.2 (Configuration Management & Stability)
 
-**🚀 Next Release:** v4.3.0 (New AI Models - OpenAI, Mistral)
+**🔍 Next Phase:** v4.5.0 (AI Provider Ecosystem Evaluation)
 
 ---
 

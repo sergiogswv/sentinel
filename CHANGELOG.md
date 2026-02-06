@@ -5,6 +5,48 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.3] - 2025-02-05
+
+### 🏗️ Refactored
+
+- **Modularización del sistema AI**: Refactorizado `ai.rs` (678 líneas) en estructura modular organizada:
+  - `src/ai/mod.rs` - Definición del módulo y re-exports públicos
+  - `src/ai/cache.rs` - Sistema de caché con almacenamiento basado en hash
+  - `src/ai/client.rs` - Comunicación con APIs de IA (Anthropic, Gemini)
+  - `src/ai/framework.rs` - Detección automática de frameworks con IA
+  - `src/ai/analysis.rs` - Análisis de arquitectura de código
+  - `src/ai/utils.rs` - Utilidades para procesamiento de respuestas (extraer/eliminar bloques de código)
+
+### ✨ Improved
+
+- **Mejor mantenibilidad**: Código organizado por responsabilidad única
+- **Navegación mejorada**: Fácil localizar funcionalidades específicas
+- **Testing aislado**: Tests unitarios incluidos en `utils.rs`
+- **Documentación clara**: Cada módulo documenta su propósito con comentarios `//!`
+- **Escalabilidad**: Estructura preparada para agregar nuevos proveedores de IA
+
+### 🔧 Internal Changes
+
+- Optimización de re-exports públicos: Solo se exportan funciones usadas fuera del módulo AI
+- Funciones internas (`consultar_ia`, `eliminar_bloques_codigo`, `extraer_codigo`) ahora son privadas al módulo
+- Imports internos actualizados para usar rutas del submódulo (`crate::ai::client::consultar_ia`)
+- Compilación limpia sin warnings
+
+### 📝 Documentation
+
+- **ESTRUCTURA.md**: Actualizado con nueva estructura modular de `src/ai/`
+- **docs/architecture.md**: Actualizado diagrama de componentes y estructura de archivos
+- Documentación inline completa en cada submódulo
+
+### 💡 Benefits
+
+- **Legibilidad**: 6 archivos especializados vs 1 archivo monolítico
+- **Separación de responsabilidades**: Cache, client, framework, analysis, utils claramente divididos
+- **Facilita contribuciones**: Desarrolladores pueden trabajar en módulos independientes
+- **Preparado para el futuro**: Estructura extensible para nuevos proveedores de IA
+
+---
+
 ## [4.4.2] - 2025-02-05
 
 ### 🐛 Fixed

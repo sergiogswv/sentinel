@@ -18,7 +18,7 @@ The configuration includes:
 ## Configuration Structure
 
 ```toml
-version = "4.4.2"  # Configuration format version
+version = "4.4.3"  # Configuration format version
 project_name = "mi-proyecto"
 framework = "NestJS"
 manager = "npm"

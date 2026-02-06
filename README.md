@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.4.2-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.4.3-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -96,7 +96,8 @@ Once started, Sentinel responds to these commands:
 ### 📋 Project
 
 - **[Roadmap](docs/roadmap.md)** - Planned features
-- **[Changelog](CHANGELOG.md)** - Change history
+- **[Changelog](CHANGELOG.md)** - Change history ([English version](CHANGELOG_EN.md))
+- **[Structure](ESTRUCTURA.md)** - Project structure ([English version](STRUCTURE.md))
 
 ---
 

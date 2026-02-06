@@ -189,7 +189,7 @@ fn main() {
             .to_string();
 
         // Intentar detectar si este archivo es un hijo de un servicio/módulo padre
-        let base_name = match files::detectar_archivo_padre(&changed_path, &project_path) {
+        let base_name = match files::detectar_archivo_padre(&changed_path, &project_path, &config.parent_patterns) {
             Some(padre) => {
                 println!(
                     "   ℹ️  Archivo hijo detectado, usando tests del módulo: {}",
@@ -203,10 +203,11 @@ fn main() {
             }
         };
 
-        let test_rel_path = format!("test/{}/{}.spec.ts", base_name, base_name);
+        // Buscar archivo de test usando los patrones del framework
+        let test_rel_path = files::buscar_archivo_test(&base_name, &project_path, &config.test_patterns);
 
         // Si no existen tests, preguntar al usuario si quiere revisión del código
-        if !project_path.join(&test_rel_path).exists() {
+        if test_rel_path.is_none() {
             println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
             println!(
                 "{}",
@@ -247,54 +248,57 @@ fn main() {
             continue;
         }
 
-        println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
+        // Si hay tests disponibles, proceder con el flujo completo
+        if let Some(test_path) = test_rel_path {
+            println!("\n🔔 CAMBIO EN: {}", file_name.cyan().bold());
 
-        if let Ok(codigo) = std::fs::read_to_string(&changed_path) {
-            match ai::analizar_arquitectura(
-                &codigo,
-                &file_name,
-                Arc::clone(&stats),
-                &config,
-                &project_path,
-                &changed_path,
-            ) {
-                Ok(true) => {
-                    if tests::ejecutar_tests(&test_rel_path, &project_path).is_ok() {
-                        let _ = docs::actualizar_documentacion(
-                            &codigo,
-                            &changed_path,
-                            &config,
-                            Arc::clone(&stats),
-                            &project_path,
-                        );
-                        let msg = git::generar_mensaje_commit(
-                            &codigo,
-                            &file_name,
-                            &config,
-                            Arc::clone(&stats),
-                            &project_path,
-                        );
-                        println!("\n🚀 Mensaje: {}", msg.bright_cyan().bold());
-                        print!("📝 ¿Commit? (s/n): ");
-                        io::stdout().flush().unwrap();
-                        if let Some(r) = leer_respuesta() {
-                            git::preguntar_commit(&project_path, &msg, &r);
-                        }
-                    } else {
-                        print!("\n🔍 ¿Ayuda con test? (s/n): ");
-                        io::stdout().flush().unwrap();
-                        if leer_respuesta().as_deref() == Some("s") {
-                            let _ = tests::pedir_ayuda_test(
+            if let Ok(codigo) = std::fs::read_to_string(&changed_path) {
+                match ai::analizar_arquitectura(
+                    &codigo,
+                    &file_name,
+                    Arc::clone(&stats),
+                    &config,
+                    &project_path,
+                    &changed_path,
+                ) {
+                    Ok(true) => {
+                        if tests::ejecutar_tests(&test_path, &project_path).is_ok() {
+                            let _ = docs::actualizar_documentacion(
                                 &codigo,
-                                &test_rel_path,
+                                &changed_path,
                                 &config,
                                 Arc::clone(&stats),
                                 &project_path,
                             );
+                            let msg = git::generar_mensaje_commit(
+                                &codigo,
+                                &file_name,
+                                &config,
+                                Arc::clone(&stats),
+                                &project_path,
+                            );
+                            println!("\n🚀 Mensaje: {}", msg.bright_cyan().bold());
+                            print!("📝 ¿Commit? (s/n): ");
+                            io::stdout().flush().unwrap();
+                            if let Some(r) = leer_respuesta() {
+                                git::preguntar_commit(&project_path, &msg, &r);
+                            }
+                        } else {
+                            print!("\n🔍 ¿Ayuda con test? (s/n): ");
+                            io::stdout().flush().unwrap();
+                            if leer_respuesta().as_deref() == Some("s") {
+                                let _ = tests::pedir_ayuda_test(
+                                    &codigo,
+                                    &test_path,
+                                    &config,
+                                    Arc::clone(&stats),
+                                    &project_path,
+                                );
+                            }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
     }

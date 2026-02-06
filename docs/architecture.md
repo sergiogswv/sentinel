@@ -127,23 +127,29 @@ loop {
 
 ## Main Components
 
-| Component | Description |
-|-----------|-------------|
-| `detectar_archivo_padre()` | Detects if a modified file is a child of a parent module (e.g., `.service.ts`) |
-| `consultar_ia_dinamico()` | Intelligent system with cache, fallback, and multi-provider support |
-| `consultar_ia()` | Direct communication with AI APIs (Anthropic, Gemini, etc.) |
-| `ejecutar_con_fallback()` | Executes query with primary model and automatic fallback |
-| `listar_modelos_gemini()` | Retrieves list of available Gemini models |
-| `analizar_arquitectura()` | Code evaluation based on SOLID and Clean Code |
-| `ejecutar_tests()` | Jest test execution with visible console output |
-| `pedir_ayuda_test()` | Diagnosis of failures with AI |
-| `actualizar_documentacion()` | Generates ".md pocket manual" next to each .ts file |
-| `generar_mensaje_commit()` | Generation of messages following Conventional Commits |
-| `preguntar_commit()` | Executes commit if user accepts (receives response from main loop) |
-| `obtener_resumen_git()` | Gets commits from the day using git log |
-| `generar_reporte_diario()` | Creates productivity report with AI based on commits |
-| `SentinelStats` | Management of persistent metrics and statistics |
-| `SentinelConfig` | Project configuration (.sentinelrc.toml) |
+| Component | Module | Description |
+|-----------|--------|-------------|
+| `detectar_archivo_padre()` | `files` | Detects if a modified file is a child of a parent module (e.g., `.service.ts`) |
+| `consultar_ia_dinamico()` | `ai::client` | Intelligent system with cache, fallback, and multi-provider support |
+| `consultar_ia()` | `ai::client` | Direct communication with AI APIs (Anthropic, Gemini, etc.) |
+| `ejecutar_con_fallback()` | `ai::client` | Executes query with primary model and automatic fallback |
+| `intentar_leer_cache()` | `ai::cache` | Attempts to read cached AI response |
+| `guardar_en_cache()` | `ai::cache` | Saves AI response to cache |
+| `limpiar_cache()` | `ai::cache` | Clears all cached responses |
+| `detectar_framework_con_ia()` | `ai::framework` | Auto-detects framework using AI analysis |
+| `listar_modelos_gemini()` | `ai::framework` | Retrieves list of available Gemini models |
+| `analizar_arquitectura()` | `ai::analysis` | Code evaluation based on framework-specific rules |
+| `extraer_codigo()` | `ai::utils` | Extracts code blocks from AI markdown responses |
+| `eliminar_bloques_codigo()` | `ai::utils` | Removes code blocks, keeps explanatory text |
+| `ejecutar_tests()` | `tests` | Jest test execution with visible console output |
+| `pedir_ayuda_test()` | `tests` | Diagnosis of failures with AI |
+| `actualizar_documentacion()` | `docs` | Generates ".md pocket manual" next to each file |
+| `generar_mensaje_commit()` | `git` | Generation of messages following Conventional Commits |
+| `preguntar_commit()` | `git` | Executes commit if user accepts |
+| `obtener_resumen_git()` | `git` | Gets commits from the day using git log |
+| `generar_reporte_diario()` | `git` | Creates productivity report with AI based on commits |
+| `SentinelStats` | `stats` | Management of persistent metrics and statistics |
+| `SentinelConfig` | `config` | Project configuration (.sentinelrc.toml) |
 
 ---
 
@@ -167,20 +173,33 @@ watcher.watch(&src_path, RecursiveMode::Recursive)?;
 
 ---
 
-### AI Analysis System
+### AI Analysis System (v4.4.3 - Modular Architecture)
+
+**Modular Structure:**
+
+The AI system is organized into specialized modules for better maintainability and scalability:
+
+- **`ai/client.rs`**: Multi-provider communication layer
+- **`ai/cache.rs`**: Hash-based caching system
+- **`ai/framework.rs`**: Intelligent framework detection
+- **`ai/analysis.rs`**: Code architecture evaluation
+- **`ai/utils.rs`**: Response parsing and processing
 
 **Multi-Provider Architecture:**
 
 ```
-consultar_ia_dinamico()
+consultar_ia_dinamico() [ai/client.rs]
     │
-    ├─▶ Check cache
+    ├─▶ Check cache [ai/cache.rs]
     │   └─▶ If hit, return cached response
     │
-    └─▶ ejecutar_con_fallback()
+    └─▶ ejecutar_con_fallback() [ai/client.rs]
         │
         ├─▶ Try primary model
         │   └─▶ consultar_ia(primary_model)
+        │       ├─▶ consultar_anthropic() [Claude]
+        │       ├─▶ consultar_gemini_content() [Gemini Content API]
+        │       └─▶ consultar_gemini_interactions() [Gemini Interactions API]
         │
         └─▶ If fails, try fallback
             └─▶ consultar_ia(fallback_model)
@@ -337,13 +356,20 @@ Test executed: test/calls/calls.spec.ts (parent module test)
 sentinel-rust/
 ├── src/
 │   ├── main.rs           # Entry point, main loop
-│   ├── ai.rs             # AI provider communication
+│   ├── ai/               # AI integration module (v4.4.3 modularized)
+│   │   ├── mod.rs              # Module definition and public re-exports
+│   │   ├── cache.rs            # Response caching system
+│   │   ├── client.rs           # Multi-provider API communication
+│   │   ├── framework.rs        # Framework auto-detection with AI
+│   │   ├── analysis.rs         # Architecture analysis engine
+│   │   └── utils.rs            # Response processing utilities
 │   ├── config.rs         # Configuration management
 │   ├── stats.rs          # Metrics tracking
 │   ├── tests.rs          # Test execution
 │   ├── git.rs            # Git operations
 │   ├── docs.rs           # Documentation generation
-│   └── files.rs          # Parent file detection utilities
+│   ├── files.rs          # Parent file detection utilities
+│   └── ui.rs             # User interface and prompts
 ├── target/
 │   └── release/
 │       └── sentinel-rust # Compiled binary

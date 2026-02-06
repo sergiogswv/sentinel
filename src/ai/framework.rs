@@ -1,0 +1,222 @@
+//! Detección de frameworks usando IA
+//!
+//! Analiza archivos del proyecto para identificar el framework principal,
+//! lenguaje de programación, patrones de arquitectura y configuraciones.
+
+use crate::ai::client::consultar_ia;
+use crate::config::{FrameworkDetection, SentinelConfig};
+use crate::stats::SentinelStats;
+use colored::*;
+use reqwest::blocking::Client;
+use std::fs;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+/// Detecta el framework y sus reglas usando IA analizando los archivos del proyecto
+pub fn detectar_framework_con_ia(
+    project_path: &Path,
+    config: &SentinelConfig,
+) -> anyhow::Result<FrameworkDetection> {
+    println!("{}", "🤖 Detectando framework con IA...".magenta());
+
+    let archivos = SentinelConfig::listar_archivos_raiz(project_path);
+    let archivos_str = archivos.join("\n");
+
+    // Leer automáticamente archivos clave para mejorar la detección
+    let mut contenido_extra = String::new();
+
+    // Intentar leer package.json (proyectos JS/TS)
+    if let Ok(package_json) = fs::read_to_string(project_path.join("package.json")) {
+        let primeras_lineas: String = package_json
+            .lines()
+            .take(50) // Primeras 50 líneas incluyen dependencies
+            .collect::<Vec<_>>()
+            .join("\n");
+        contenido_extra.push_str(&format!(
+            "\n\nCONTENIDO DE package.json (primeras 50 líneas):\n{}",
+            primeras_lineas
+        ));
+    }
+
+    // Intentar leer requirements.txt (proyectos Python)
+    if let Ok(requirements) = fs::read_to_string(project_path.join("requirements.txt")) {
+        let primeras_lineas: String = requirements.lines().take(30).collect::<Vec<_>>().join("\n");
+        contenido_extra.push_str(&format!(
+            "\n\nCONTENIDO DE requirements.txt:\n{}",
+            primeras_lineas
+        ));
+    }
+
+    // Intentar leer composer.json (proyectos PHP)
+    if let Ok(composer_json) = fs::read_to_string(project_path.join("composer.json")) {
+        let primeras_lineas: String = composer_json
+            .lines()
+            .take(40)
+            .collect::<Vec<_>>()
+            .join("\n");
+        contenido_extra.push_str(&format!(
+            "\n\nCONTENIDO DE composer.json:\n{}",
+            primeras_lineas
+        ));
+    }
+
+    let prompt_inicial = format!(
+        "Eres un Experto en Arquitectura de Software. Tu tarea es identificar el \"Framework de Alto Nivel\" \
+        que gobierna la arquitectura del proyecto.\n\n\
+        CONTEXTO:\n\
+        Archivos raíz: {}\
+        {}\n\n\
+        INSTRUCCIONES CRÍTICAS DE DIFERENCIACIÓN:\n\
+        1. Framework vs Lenguaje: No respondas con el nombre del lenguaje (ej. TypeScript, Python). \
+        Identifica el framework que dicta la estructura (ej. React, FastAPI, NestJS).\n\
+        2. Jerarquía de Decisión:\n\
+           - Si detectas 'react', el framework es \"React\" (aunque use Vite o Next, prioriza el ecosistema).\n\
+           - Si detectas '@nestjs/core', el framework es \"NestJS\", no \"Node.js\".\n\
+           - Si detectas 'actix-web' o 'axum' en un Cargo.toml, el framework es el nombre del crate.\n\
+        3. Precisión en Monorepos: Si ves múltiples configuraciones, identifica la que define la ejecución principal.\n\n\
+        RESPONDE EXCLUSIVAMENTE EN JSON:\n\
+        {{\n\
+          \"framework\": \"Nombre específico del framework (ej. React, Django, Axum)\",\n\
+          \"code_language\": \"Lenguaje base (ej. typescript, rust, python)\",\n\
+          \"rules\": [\"4 principios técnicos clave\"],\n\
+          \"extensions\": [\"ts\", \"tsx\", \"js\", etc],\n\
+          \"parent_patterns\": [\"sufijos de arquitectura\"],\n\
+          \"test_patterns\": [\"rutas de tests con {{{{name}}}}\"]\n\
+        }}\n\n\
+        IMPORTANTE: Si no hay un framework claro, identifica la librería de entrada (entry-point) principal. \
+        Prohibido responder con nombres genéricos como \"JavaScript/TypeScript\".",
+        archivos_str, contenido_extra
+    );
+
+    // Primera consulta
+    let respuesta = consultar_ia(
+        prompt_inicial,
+        &config.primary_model.api_key,
+        &config.primary_model.url,
+        &config.primary_model.name,
+        Arc::new(Mutex::new(SentinelStats::default())),
+    )?;
+
+    // Si la IA pide leer un archivo
+    if respuesta.trim().starts_with("LEER:") {
+        let archivo = respuesta.trim().replace("LEER:", "").trim().to_string();
+        let archivo_path = project_path.join(&archivo);
+
+        println!("   📄 IA solicita leer: {}", archivo.cyan());
+
+        if let Ok(contenido) = fs::read_to_string(&archivo_path) {
+            // Limitar contenido a primeras 100 líneas para no saturar
+            let contenido_limitado: String =
+                contenido.lines().take(100).collect::<Vec<_>>().join("\n");
+
+            let prompt_con_contenido = format!(
+                "Eres un Experto en Arquitectura de Software. Identifica el \"Framework de Alto Nivel\" del proyecto.\n\n\
+                CONTEXTO:\n\
+                Archivos raíz: {}\n\n\
+                Contenido de '{}':\n{}\n\n\
+                INSTRUCCIONES CRÍTICAS:\n\
+                1. Framework vs Lenguaje: Identifica el framework que dicta la arquitectura, NO el lenguaje.\n\
+                2. Jerarquía:\n\
+                   - 'react' en dependencies → Framework: \"React\"\n\
+                   - '@nestjs/core' → Framework: \"NestJS\"\n\
+                   - 'Django' → Framework: \"Django\"\n\
+                3. Prohibido responder con nombres genéricos como \"TypeScript\" o \"JavaScript\".\n\n\
+                RESPONDE EN JSON:\n\
+                {{\n\
+                  \"framework\": \"Nombre específico del framework\",\n\
+                  \"code_language\": \"lenguaje base\",\n\
+                  \"rules\": [\"4 principios clave\"],\n\
+                  \"extensions\": [\"extensiones\"],\n\
+                  \"parent_patterns\": [\"sufijos o []\"],\n\
+                  \"test_patterns\": [\"rutas con {{{{name}}}}\"]\n\
+                }}\n\n\
+                IMPORTANTE: SOLO JSON, sin texto adicional.",
+                archivos_str, archivo, contenido_limitado
+            );
+
+            let respuesta_final = consultar_ia(
+                prompt_con_contenido,
+                &config.primary_model.api_key,
+                &config.primary_model.url,
+                &config.primary_model.name,
+                Arc::new(Mutex::new(SentinelStats::default())),
+            )?;
+
+            return parsear_deteccion_framework(&respuesta_final);
+        }
+    }
+
+    // Parsear respuesta JSON
+    parsear_deteccion_framework(&respuesta)
+}
+
+/// Parsea la respuesta JSON de la IA con la detección del framework
+fn parsear_deteccion_framework(respuesta: &str) -> anyhow::Result<FrameworkDetection> {
+    // Extraer JSON si está envuelto en texto
+    let json_str = if let Some(inicio) = respuesta.find('{') {
+        if let Some(fin) = respuesta.rfind('}') {
+            &respuesta[inicio..=fin]
+        } else {
+            respuesta
+        }
+    } else {
+        respuesta
+    };
+
+    match serde_json::from_str::<FrameworkDetection>(json_str) {
+        Ok(deteccion) => {
+            println!("   ✅ Framework detectado: {}", deteccion.framework.green());
+            Ok(deteccion)
+        }
+        Err(e) => {
+            // Fallback si falla el parsing
+            println!(
+                "   ⚠️  Error al parsear respuesta de IA: {}",
+                e.to_string().yellow()
+            );
+            println!("   ℹ️  Usando configuración genérica. Edita .sentinelrc.toml después.");
+            Ok(FrameworkDetection {
+                framework: "Generic".to_string(),
+                rules: vec![
+                    "Clean Code principles".to_string(),
+                    "SOLID design patterns".to_string(),
+                    "Code maintainability".to_string(),
+                    "Comprehensive testing".to_string(),
+                ],
+                extensions: vec!["js".to_string(), "ts".to_string()],
+                code_language: "typescript".to_string(),
+                parent_patterns: vec![],
+                test_patterns: vec!["{name}.test.ts".to_string(), "{name}.spec.ts".to_string()],
+            })
+        }
+    }
+}
+
+/// Obtiene el listado de modelos disponibles en Gemini.
+pub fn listar_modelos_gemini(api_key: &str) -> anyhow::Result<Vec<String>> {
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+        api_key
+    );
+    let client = Client::new();
+    let response = client.get(&url).send()?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Error al obtener modelos: {}",
+            response.status()
+        ));
+    }
+
+    let body: serde_json::Value = response.json()?;
+    let models = body["models"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("No se encontraron modelos en la respuesta"))?
+        .iter()
+        .filter_map(|m| m["name"].as_str())
+        .map(|name| name.replace("models/", ""))
+        .filter(|name| name.starts_with("gemini"))
+        .collect();
+
+    Ok(models)
+}

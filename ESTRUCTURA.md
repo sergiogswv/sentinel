@@ -9,7 +9,13 @@ El proyecto ha sido refactorizado en módulos especializados para mejorar la man
 ```
 src/
 ├── main.rs        # Punto de entrada y loop principal del watcher
-├── ai.rs          # Comunicación con Claude AI
+├── ai/            # Módulo de integración con IA (modularizado v4.4.3)
+│   ├── mod.rs           # Definición del módulo y re-exports
+│   ├── cache.rs         # Sistema de caché de respuestas
+│   ├── client.rs        # Comunicación con APIs de IA
+│   ├── framework.rs     # Detección de frameworks con IA
+│   ├── analysis.rs      # Análisis de arquitectura
+│   └── utils.rs         # Utilidades (extraer/eliminar código)
 ├── config.rs      # Gestión de configuración (.sentinelrc.toml)
 ├── docs.rs        # Generación de documentación
 ├── files.rs       # Utilidades de detección de archivos padres
@@ -43,31 +49,103 @@ src/
 
 ---
 
-### `ai.rs`
-**Responsabilidad**: Comunicación con Claude AI
+### `ai/` (v4.4.3 - Estructura Modularizada)
+**Responsabilidad**: Integración completa con proveedores de IA
+
+El módulo AI ha sido refactorizado en submódulos especializados para mejor mantenibilidad:
+
+#### `ai/mod.rs`
+- Define el módulo y sus re-exports públicos
+- API pública: `analizar_arquitectura`, `limpiar_cache`, `consultar_ia_dinamico`, `TaskType`, `detectar_framework_con_ia`, `listar_modelos_gemini`
+
+#### `ai/cache.rs`
+**Responsabilidad**: Sistema de caché de respuestas de IA
 
 **Funciones públicas**:
-- `consultar_claude(prompt: String) -> Result<String>`
-  - Realiza consultas al API de Anthropic
-  - Variables de entorno: ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL
+- `limpiar_cache(project_path: &Path)` - Elimina todo el caché
+- `obtener_cache_path()`, `intentar_leer_cache()`, `guardar_en_cache()` - Gestión de caché basada en hash
 
-- `analizar_arquitectura(codigo: &str, file_name: &str) -> Result<bool>`
-  - Analiza código TypeScript/NestJS
-  - Evalúa SOLID, Clean Code y buenas prácticas
-  - Genera archivos `.suggested` con código mejorado
-  - En consola muestra solo el consejo textual (sin bloques de código)
+**Implementación**:
+- Hash-based storage en `.sentinel/cache/`
+- Clave: hash SHA del prompt
+- Reduce costos de API hasta 70%
 
-- `extraer_codigo(texto: &str) -> String`
-  - Extrae bloques de código TypeScript de respuestas de Claude
-  - Busca delimitadores \`\`\`typescript...\`\`\`
+#### `ai/client.rs`
+**Responsabilidad**: Comunicación con APIs de proveedores de IA
 
-**Funciones privadas**:
-- `eliminar_bloques_codigo(texto: &str) -> String`
-  - Filtra bloques de código de la respuesta para mostrar solo texto en consola
+**Funciones públicas**:
+- `consultar_ia_dinamico(prompt, task_type, config, stats, project_path)` - Punto de entrada con caché y fallback
+- `consultar_ia(prompt, api_key, base_url, model_name, stats)` - Cliente base multi-proveedor
+- `TaskType` enum - Light (commits, docs) vs Deep (arquitectura, debug)
+
+**Implementaciones de proveedores**:
+- `consultar_anthropic()` - Anthropic Claude (Opus, Sonnet, Haiku)
+- `consultar_gemini_content()` - Google Gemini Content API
+- `consultar_gemini_interactions()` - Google Gemini Interactions API
+
+**Sistema de fallback**:
+- `ejecutar_con_fallback()` - Intenta modelo primario, fallback automático si falla
+- Tracking de tokens y costos por consulta
 
 **Dependencias**:
 - `reqwest` - Cliente HTTP
 - `serde_json` - Serialización JSON
+- `colored` - Output con colores
+
+#### `ai/framework.rs`
+**Responsabilidad**: Detección automática de frameworks con IA
+
+**Funciones públicas**:
+- `detectar_framework_con_ia(project_path, config)` - Analiza proyecto y detecta framework
+- `listar_modelos_gemini(api_key)` - Obtiene modelos disponibles de Gemini
+
+**Funciones privadas**:
+- `parsear_deteccion_framework(respuesta)` - Parser JSON con fallback a configuración genérica
+
+**Proceso de detección**:
+1. Lee archivos raíz del proyecto (package.json, requirements.txt, composer.json)
+2. Envía contexto a IA con prompt especializado
+3. IA puede solicitar leer archivos específicos para más contexto
+4. Retorna `FrameworkDetection` con: framework, code_language, rules, extensions, parent_patterns, test_patterns
+
+**Dependencias**:
+- `colored` - Output con colores
+- `reqwest` - Cliente HTTP para Gemini API
+
+#### `ai/analysis.rs`
+**Responsabilidad**: Análisis de arquitectura de código
+
+**Funciones públicas**:
+- `analizar_arquitectura(codigo, file_name, stats, config, project_path, file_path)` - Análisis completo de código
+
+**Proceso**:
+1. Construye prompt con reglas de arquitectura específicas del framework detectado
+2. Usa `code_language` dinámico para bloques de código
+3. Consulta IA y evalúa respuesta (CRITICO vs SEGURO)
+4. Genera archivo `.suggested` con código mejorado
+5. Actualiza estadísticas (bugs evitados, sugerencias, tiempo ahorrado)
+6. Muestra consejo sin bloques de código en consola
+
+**Dependencias**:
+- `crate::ai::client` - Para consultas
+- `crate::ai::utils` - Para procesamiento de respuestas
+
+#### `ai/utils.rs`
+**Responsabilidad**: Utilidades para procesamiento de respuestas de IA
+
+**Funciones públicas**:
+- `extraer_codigo(texto)` - Extrae bloques ```lenguaje``` de respuestas markdown
+- `eliminar_bloques_codigo(texto)` - Remueve código, mantiene solo explicaciones
+
+**Lenguajes soportados**:
+- typescript, javascript, python, php, go, rust, java, jsx, tsx, code
+
+**Tests unitarios incluidos**:
+- `test_extraer_codigo_typescript()`
+- `test_extraer_codigo_sin_lenguaje()`
+- `test_extraer_codigo_sin_bloque()`
+- `test_eliminar_bloques_codigo()`
+- `test_eliminar_multiples_bloques()`
 
 ---
 
@@ -300,6 +378,14 @@ pub struct SentinelStats {
        │         └──▶ Si no es hijo, usa nombre del archivo actual
        │
        ├──▶ ai::analizar_arquitectura()  (consejo en consola, código en .suggested)
+       │         └──▶ ai::client::consultar_ia_dinamico()  (v4.4.3 modularizado)
+       │               ├──▶ ai::cache::intentar_leer_cache() [si use_cache=true]
+       │               ├──▶ ai::client::ejecutar_con_fallback() [si no hay caché]
+       │               │     ├──▶ Intenta primary_model
+       │               │     └──▶ Intenta fallback_model [si primary falla]
+       │               └──▶ ai::cache::guardar_en_cache() [si éxito]
+       │         └──▶ ai::utils::extraer_codigo() [extrae código sugerido]
+       │         └──▶ ai::utils::eliminar_bloques_codigo() [muestra consejo]
        │         └──▶ stats::incrementar_bugs_evitados() [si crítico]
        │         └──▶ stats::incrementar_sugerencias() [si genera .suggested]
        │

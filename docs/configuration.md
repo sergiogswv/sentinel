@@ -6,6 +6,7 @@ Sentinel uses a `.sentinelrc.toml` file per project that is automatically create
 
 The configuration includes:
 
+- **Version**: Configuration format version (for migration)
 - **AI Models**: Primary model and optional fallback model
 - **Supported Providers**: Claude (Anthropic), Gemini (Google), and others
 - **Cache**: Enabled by default to reduce costs
@@ -17,11 +18,14 @@ The configuration includes:
 ## Configuration Structure
 
 ```toml
-[project]
+version = "4.4.2"  # Configuration format version
 project_name = "mi-proyecto"
 framework = "NestJS"
 manager = "npm"
 test_command = "npm run test"
+architecture_rules = ["SOLID Principles", "Clean Code", "NestJS Best Practices"]
+file_extensions = ["js", "ts", "jsx", "tsx"]
+ignore_patterns = ["node_modules", "dist", ".git", "build"]
 use_cache = true
 
 [primary_model]
@@ -29,15 +33,8 @@ name = "claude-opus-4-5-20251101"
 url = "https://api.anthropic.com"
 api_key = "sk-ant-api03-..."
 
-[fallback_model]  # Optional
-name = "gemini-2.0-flash"
-url = "https://generativelanguage.googleapis.com"
-api_key = "AIza..."
-
-[[architecture_rules]]
-"SOLID Principles"
-"Clean Code"
-"NestJS Best Practices"
+# Optional fallback model
+fallback_model = { name = "gemini-2.0-flash", url = "https://generativelanguage.googleapis.com", api_key = "AIza..." }
 ```
 
 ## Model Configuration
@@ -93,6 +90,73 @@ use_cache = true  # Enable/disable cache
 **Cache location:** `.sentinel/cache/`
 
 To disable cache, change to `false` and restart Sentinel.
+
+## Configuration Migration (v4.4.2+)
+
+Starting with v4.4.2, Sentinel includes an **automatic migration system** for configuration files.
+
+### Features
+
+- ✅ **Automatic detection**: Detects old configuration formats automatically
+- ✅ **Data preservation**: API keys and custom settings are preserved
+- ✅ **Field validation**: Missing fields are completed with appropriate defaults
+- ✅ **Version tracking**: Each config has a `version` field for compatibility
+
+### How It Works
+
+1. **Old config detected**: If your `.sentinelrc.toml` doesn't have a `version` field, it's considered old
+2. **Automatic migration**: Sentinel migrates it to the latest format
+3. **Safe update**: Your API keys and custom settings are preserved
+4. **Transparent**: You'll see migration messages in the console
+
+### Example Migration
+
+**Before (v4.4.1 or earlier):**
+```toml
+project_name = "mi-app"
+framework = "React"
+manager = "npm"
+
+[primary_model]
+name = "claude-opus-4-5-20251101"
+url = "https://api.anthropic.com"
+api_key = "sk-ant-..."
+```
+
+**After (v4.4.2 automatic migration):**
+```toml
+version = "4.4.2"  # ← Automatically added
+project_name = "mi-app"
+framework = "React"
+manager = "npm"
+test_command = "npm run test"  # ← Auto-completed if missing
+architecture_rules = ["Clean Code", "SOLID Principles"]  # ← Auto-completed
+file_extensions = ["js", "ts"]  # ← Auto-completed
+ignore_patterns = ["node_modules", "dist", ".git"]  # ← Auto-completed
+
+[primary_model]
+name = "claude-opus-4-5-20251101"
+url = "https://api.anthropic.com"
+api_key = "sk-ant-..."  # ← Preserved
+```
+
+### Migration Messages
+
+When Sentinel migrates your configuration, you'll see:
+
+```
+   🔄 Detectada configuración antigua, migrando...
+   ✅ Configuración migrada exitosamente
+```
+
+Or for version updates:
+
+```
+   🔄 Migrando configuración de versión 4.4.1 a 4.4.2...
+   ✅ Configuración migrada exitosamente
+```
+
+[Read more about migration →](../MIGRATION.md)
 
 ## Editing Configuration
 

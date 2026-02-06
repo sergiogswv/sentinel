@@ -5,6 +5,65 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2025-02-05
+
+### 🚀 New Features
+
+- **Intelligent Testing Framework Detection**: New automatic testing framework analysis system
+  - Detects installed frameworks (Jest, Pytest, Vitest, Cypress, PHPUnit, etc.)
+  - Validates existing configurations (config files, dependencies)
+  - Suggests appropriate frameworks based on the project's main framework
+  - Multi-language support: JavaScript/TypeScript, Python, PHP, Rust, Go, Java
+  - Testing status: `valid`, `incomplete`, or `missing`
+
+### ✨ Enhanced
+
+- **Contextual Recommendations**: Testing suggestions adapt to the detected framework:
+  - **React/Next.js**: Prioritizes Jest, Vitest, Cypress
+  - **NestJS**: Recommends Jest (integrated by default) + Supertest
+  - **Django/FastAPI**: Suggests Pytest as standard
+  - **Laravel**: PHPUnit or Pest with Laravel Dusk for E2E
+  - **Rust/Go**: Native language testing frameworks
+
+### 🧪 Testing Intelligence
+
+- **Static Analysis**: Detects configuration files (jest.config.js, pytest.ini, etc.)
+- **Dependency Analysis**: Checks package.json, requirements.txt, composer.json, Cargo.toml
+- **AI Validation**: Confirms and improves recommendations using configured model
+- **Installation Commands**: Generates specific commands based on package manager (npm/yarn/pnpm/pip/composer)
+
+### 📊 New Configuration Fields
+
+```toml
+[config]
+testing_framework = "Jest"           # Detected testing framework
+testing_status = "valid"             # Status: valid|incomplete|missing
+```
+
+### 🎨 UI Improvements
+
+- Colorful visual summary of testing analysis
+- Priority indicators for suggestions (🔥 high, ⭐ medium, 💡 low)
+- Detailed information about detected frameworks and configuration files
+
+### 🏗️ Architecture
+
+- New module `src/ai/testing.rs` (450+ lines)
+  - `TestingFrameworkInfo`: Testing information structure
+  - `TestingStatus`: Enum for states (Valid, Incomplete, Missing)
+  - `TestingSuggestion`: Suggestions with priority and installation commands
+  - `detectar_testing_framework()`: Main detection function
+  - Support for 20+ popular testing frameworks
+
+### 🔧 Technical Details
+
+- Integration with initialization process (`inicializar_sentinel`)
+- Automatic detection during `sentinel init`
+- Backwards compatible: optional configuration fields
+- Compiles without warnings
+
+---
+
 ## [4.4.3] - 2025-02-05
 
 ### 🏗️ Refactored

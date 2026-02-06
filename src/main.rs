@@ -110,7 +110,41 @@ fn main() {
                         println!("   ⏭️  Limpieza de caché cancelada.");
                     }
                 } else if cmd == "h" || cmd == "help" {
-                    ui::mostrar_ayuda();
+                    ui::mostrar_ayuda(Some(&config_hilo));
+                } else if cmd == "t" {
+                    // Ver sugerencias de testing complementarias
+                    let cfg = &config_hilo;
+                    if let Some(testing_fw) = &cfg.testing_framework {
+                        if cfg.testing_status.as_ref().map_or(false, |s| s == "valid") {
+                            match ai::obtener_sugerencias_complementarias(&project_path_hilo, cfg, testing_fw) {
+                                Ok(sugerencias) => {
+                                    if !sugerencias.is_empty() {
+                                        println!("\n   {}", "🧪 FRAMEWORKS COMPLEMENTARIOS SUGERIDOS:".bold().yellow());
+                                        for (i, sug) in sugerencias.iter().enumerate() {
+                                            let priority_icon = match sug.priority {
+                                                1 => "🔥",
+                                                2 => "⭐",
+                                                _ => "💡",
+                                            };
+                                            println!("\n   {} {}. {}", priority_icon, i + 1, sug.framework.bold());
+                                            println!("      📝 {}", sug.reason);
+                                            println!("      💻 {}", sug.install_command.cyan());
+                                        }
+                                        println!();
+                                    } else {
+                                        println!("   ✅ Tu stack de testing está completo. No hay sugerencias adicionales.");
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("   ⚠️  Error al obtener sugerencias: {}", e.to_string().yellow());
+                                }
+                            }
+                        } else {
+                            println!("   ℹ️  El comando [t] solo está disponible cuando el testing está configurado correctamente.");
+                        }
+                    } else {
+                        println!("   ℹ️  No hay testing configurado. Ejecuta 'sentinel init' para detectar frameworks de testing.");
+                    }
                 } else if cmd == "x" {
                     print!("⚠️  ¿Reiniciar configuración? (s/n): ");
                     io::stdout().flush().unwrap();
@@ -162,7 +196,7 @@ fn main() {
     );
 
     // Mostrar ayuda de comandos al inicio
-    ui::mostrar_ayuda();
+    ui::mostrar_ayuda(Some(&config));
 
     let mut ultimo_cambio: HashMap<PathBuf, Instant> = HashMap::new();
     while let Ok(changed_path) = rx.recv() {

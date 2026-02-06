@@ -147,6 +147,62 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 - `test_eliminar_bloques_codigo()`
 - `test_eliminar_multiples_bloques()`
 
+#### `ai/testing.rs`
+**Responsabilidad**: Detección y validación de frameworks de testing
+
+**Funciones públicas**:
+- `detectar_testing_framework(project_path, config)` - Analiza y detecta frameworks de testing instalados
+
+**Estructuras de datos**:
+- `TestingFrameworkInfo` - Información completa del análisis de testing
+  - `testing_framework: Option<String>` - Framework principal detectado
+  - `additional_frameworks: Vec<String>` - Frameworks adicionales
+  - `config_files: Vec<String>` - Archivos de configuración encontrados
+  - `status: TestingStatus` - Estado del testing (Valid, Incomplete, Missing)
+  - `suggestions: Vec<TestingSuggestion>` - Sugerencias de instalación
+- `TestingStatus` - Enum: Valid, Incomplete, Missing
+- `TestingSuggestion` - Sugerencia con framework, reason, install_command, priority
+
+**Proceso de detección**:
+1. **Análisis estático**: Busca archivos de configuración (jest.config.js, pytest.ini, cypress.json, etc.)
+2. **Análisis de dependencias**:
+   - JavaScript/TypeScript: package.json (dependencies/devDependencies)
+   - Python: requirements.txt
+   - PHP: composer.json
+   - Rust: Cargo.toml (testing nativo)
+   - Go: go.mod (testing nativo)
+3. **Determinación de estado**: Valid (completo), Incomplete (sin config), Missing (ninguno)
+4. **Generación de sugerencias**: Basadas en el framework principal detectado
+5. **Validación con IA**: Consulta al modelo para confirmar y mejorar recomendaciones
+
+**Frameworks soportados por ecosistema**:
+- **JavaScript/TypeScript**: Jest, Vitest, Cypress, Playwright, Mocha, Jasmine, Karma
+- **Python**: Pytest, Unittest, Coverage.py
+- **PHP**: PHPUnit, Pest, Laravel Dusk
+- **Rust**: Built-in testing, cargo-tarpaulin
+- **Go**: Go Testing, testify, httptest
+- **Java**: JUnit 5, Spring Test, Mockito
+
+**Recomendaciones contextuales**:
+- `obtener_frameworks_recomendados(framework)` - Retorna frameworks apropiados por tecnología
+  - React/Next.js → Jest, Vitest, Cypress
+  - NestJS → Jest (integrado), Supertest, Cypress
+  - Django/FastAPI → Pytest, Coverage.py
+  - Laravel → PHPUnit, Pest, Laravel Dusk
+  - Rust frameworks → Built-in testing con framework-specific helpers
+
+**Funciones auxiliares**:
+- `generar_comando_instalacion(framework, project_framework, manager)` - Genera comandos de instalación específicos
+- `mostrar_resumen_testing(info)` - Muestra resumen visual colorido con indicadores de prioridad
+- `consultar_ia_para_testing()` - Validación y mejora de recomendaciones con IA
+- `parsear_testing_info()` - Parser JSON con fallback a datos básicos
+
+**Dependencias**:
+- `crate::ai::client` - Para consultas a IA
+- `crate::config` - Para configuración del proyecto
+- `serde` - Serialización/deserialización JSON
+- `colored` - Output colorido en consola
+
 ---
 
 ### `git.rs`

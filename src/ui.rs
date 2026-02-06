@@ -97,7 +97,7 @@ pub fn seleccionar_proyecto() -> PathBuf {
 }
 
 /// Muestra la ayuda de comandos disponibles
-pub fn mostrar_ayuda() {
+pub fn mostrar_ayuda(config: Option<&SentinelConfig>) {
     println!(
         "\n{}",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_cyan()
@@ -117,6 +117,15 @@ pub fn mostrar_ayuda() {
         "  m       Ver dashboard de métricas (bugs, costos, tokens)".dimmed()
     );
     println!("{}", "  l       Limpiar caché de respuestas de IA".dimmed());
+
+    // Mostrar comando T solo si hay testing configurado
+    if let Some(cfg) = config {
+        if cfg.testing_framework.is_some() &&
+           cfg.testing_status.as_ref().map_or(false, |s| s == "valid") {
+            println!("{}", "  t       Ver sugerencias de testing complementarias".dimmed());
+        }
+    }
+
     println!(
         "{}",
         "  x       Reiniciar configuración desde cero".dimmed()
@@ -262,6 +271,36 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
     // Comparar con framework actual
     if tiene_config_existente && deteccion.framework == framework_actual {
         println!("   ✓ Framework: {} (sin cambios)", deteccion.framework.green());
+
+        // Detectar frameworks de testing si no está ya configurado
+        if config.testing_framework.is_none() || config.testing_status.is_none() {
+            match ai::detectar_testing_framework(project_path, &config) {
+                Ok(testing_info) => {
+                    config.testing_framework = testing_info.testing_framework;
+                    config.testing_status = Some(match testing_info.status {
+                        ai::TestingStatus::Valid => "valid".to_string(),
+                        ai::TestingStatus::Incomplete => "incomplete".to_string(),
+                        ai::TestingStatus::Missing => "missing".to_string(),
+                    });
+                    let _ = config.save(project_path);
+                }
+                Err(e) => {
+                    println!("   ⚠️  Error al detectar testing framework: {}", e.to_string().yellow());
+                    println!("   ℹ️  Continuando sin detección de testing");
+                }
+            }
+        } else {
+            let default_fw = "N/A".to_string();
+            let default_status = "unknown".to_string();
+            let testing_fw = config.testing_framework.as_ref().unwrap_or(&default_fw);
+            let testing_status = config.testing_status.as_ref().unwrap_or(&default_status);
+
+            println!("   ✓ Testing: {} ({})",
+                testing_fw.green(),
+                testing_status.cyan()
+            );
+        }
+
         return config;
     }
 
@@ -295,6 +334,23 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
     config.code_language = deteccion.code_language;
     config.parent_patterns = deteccion.parent_patterns;
     config.test_patterns = deteccion.test_patterns;
+
+    // Detectar frameworks de testing
+    match ai::detectar_testing_framework(project_path, &config) {
+        Ok(testing_info) => {
+            config.testing_framework = testing_info.testing_framework.clone();
+            config.testing_status = Some(match testing_info.status {
+                ai::TestingStatus::Valid => "valid".to_string(),
+                ai::TestingStatus::Incomplete => "incomplete".to_string(),
+                ai::TestingStatus::Missing => "missing".to_string(),
+            });
+
+        }
+        Err(e) => {
+            println!("   ⚠️  Error al detectar testing framework: {}", e.to_string().yellow());
+            println!("   ℹ️  Continuando sin detección de testing");
+        }
+    }
 
     let _ = config.save(project_path);
     println!("{}", "✅ Configuración actualizada.".green());

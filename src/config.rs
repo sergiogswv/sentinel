@@ -50,6 +50,11 @@ pub struct SentinelConfig {
     pub primary_model: ModelConfig,
     pub fallback_model: Option<ModelConfig>,
     pub use_cache: bool,
+    // Testing framework detection
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub testing_framework: Option<String>, // Framework de testing principal (ej: "Jest", "Pytest")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub testing_status: Option<String>, // Estado: "valid", "incomplete", "missing"
 }
 
 impl SentinelConfig {
@@ -93,6 +98,8 @@ impl SentinelConfig {
             primary_model: default_model,
             fallback_model: None,
             use_cache: true,
+            testing_framework: None,
+            testing_status: None,
         }
     }
 

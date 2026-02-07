@@ -3,7 +3,7 @@
 //! Evalúa código fuente contra reglas de arquitectura específicas del framework,
 //! principios SOLID, Clean Code y mejores prácticas.
 
-use crate::ai::client::{consultar_ia_dinamico, TaskType};
+use crate::ai::client::{TaskType, consultar_ia_dinamico};
 use crate::ai::utils::{eliminar_bloques_codigo, extraer_codigo};
 use crate::config::SentinelConfig;
 use crate::stats::SentinelStats;
@@ -113,7 +113,7 @@ pub fn analizar_arquitectura(
     fs::write(&suggested_path, &sugerencia)?;
 
     let consejo = eliminar_bloques_codigo(&respuesta);
-    println!("\n✨ CONSEJO DE CLAUDE:\n{}", consejo);
+    println!("\n✨ CONSEJO DE IA:\n{}", consejo);
 
     Ok(!es_critico)
 }

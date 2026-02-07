@@ -7,7 +7,6 @@ use crate::ai::client::consultar_ia;
 use crate::config::{FrameworkDetection, SentinelConfig};
 use crate::stats::SentinelStats;
 use colored::*;
-use reqwest::blocking::Client;
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -91,9 +90,7 @@ pub fn detectar_framework_con_ia(
     // Primera consulta
     let respuesta = consultar_ia(
         prompt_inicial,
-        &config.primary_model.api_key,
-        &config.primary_model.url,
-        &config.primary_model.name,
+        config.ai_configs[0].clone(),
         Arc::new(Mutex::new(SentinelStats::default())),
     )?;
 
@@ -136,9 +133,7 @@ pub fn detectar_framework_con_ia(
 
             let respuesta_final = consultar_ia(
                 prompt_con_contenido,
-                &config.primary_model.api_key,
-                &config.primary_model.url,
-                &config.primary_model.name,
+                config.ai_configs[0].clone(),
                 Arc::new(Mutex::new(SentinelStats::default())),
             )?;
 
@@ -190,33 +185,4 @@ fn parsear_deteccion_framework(respuesta: &str) -> anyhow::Result<FrameworkDetec
             })
         }
     }
-}
-
-/// Obtiene el listado de modelos disponibles en Gemini.
-pub fn listar_modelos_gemini(api_key: &str) -> anyhow::Result<Vec<String>> {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models?key={}",
-        api_key
-    );
-    let client = Client::new();
-    let response = client.get(&url).send()?;
-
-    if !response.status().is_success() {
-        return Err(anyhow::anyhow!(
-            "Error al obtener modelos: {}",
-            response.status()
-        ));
-    }
-
-    let body: serde_json::Value = response.json()?;
-    let models = body["models"]
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("No se encontraron modelos en la respuesta"))?
-        .iter()
-        .filter_map(|m| m["name"].as_str())
-        .map(|name| name.replace("models/", ""))
-        .filter(|name| name.starts_with("gemini"))
-        .collect();
-
-    Ok(models)
 }

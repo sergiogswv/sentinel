@@ -175,10 +175,11 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
         .unwrap()
         .to_string();
 
-    // Intentar cargar configuración existente
+    let mut existia_config = false;
     let mut config = if let Some(cfg) = SentinelConfig::load(project_path) {
         println!("{}", "🔄 Configuración existente encontrada".yellow());
         println!("   💾 Preservando API keys y configuraciones personalizadas...");
+        existia_config = true;
         cfg
     } else {
         // Nueva configuración - pedir API keys
@@ -214,12 +215,13 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
             }]
         });
 
+        let _ = config.save(project_path);
         config
     };
 
     // Guardar framework actual para comparar
     let framework_actual = config.framework.clone();
-    let tiene_config_existente = SentinelConfig::load(project_path).is_some();
+    let tiene_config_existente = existia_config;
 
     // Detectar framework con IA (silenciosamente)
     let deteccion = match ai::detectar_framework_con_ia(project_path, &config) {
@@ -346,6 +348,17 @@ pub fn inicializar_sentinel(project_path: &Path) -> SentinelConfig {
         }
     }
 
+    match config.save(project_path) {
+        Ok(_) => println!(
+            "   💾 Configuración guardada en: {}",
+            project_path
+                .join(".sentinelrc.toml")
+                .display()
+                .to_string()
+                .cyan()
+        ),
+        Err(e) => eprintln!("   ❌ Error al guardar la configuración: {}", e),
+    }
     println!("{}", "✅ Configuración actualizada.".green());
     config
 }

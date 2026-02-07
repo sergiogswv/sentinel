@@ -5,6 +5,26 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-02-07
+
+### 🚀 New Features
+
+- **Multi-AI Provider Configuration**: Support for multiple simultaneous AI providers.
+  - Supported: Claude, Gemini, OpenAI, Groq, Ollama, Kimi, DeepSeek.
+  - Incremental configuration system: Add as many providers as you need.
+  - Cascading fallback: If one provider fails, Sentinel automatically tries the next one in the list.
+- **Dynamic Model Discovery**: Sentinel now queries provider APIs to list all your available models automatically.
+- **Enhanced Configuration Assistant**: Completely revamped `sentinel init` process using `dialoguer` for an elite interactive experience.
+- **Smart Migration**: Your old configurations are automatically migrated to the new provider list format while preserving your API keys.
+
+### 🔧 Improvements & Refactors
+
+- **IA-Agnostic Modules**: Framework detection, testing, and code analysis now work with any configured provider.
+- **Robustness**: Fixed configuration saving issues during initialization.
+- **UI UX**: Generic "AI ADVICE" labels instead of provider-specific ones.
+
+---
+
 ## [4.5.0] - 2025-02-05
 
 ### 🚀 New Features

@@ -18,7 +18,7 @@ The configuration includes:
 ## Configuration Structure
 
 ```toml
-version = "4.4.3"  # Configuration format version
+version = "4.6.0"  # Configuration format version
 project_name = "mi-proyecto"
 framework = "NestJS"
 manager = "npm"
@@ -28,35 +28,36 @@ file_extensions = ["js", "ts", "jsx", "tsx"]
 ignore_patterns = ["node_modules", "dist", ".git", "build"]
 use_cache = true
 
-[primary_model]
-name = "claude-opus-4-5-20251101"
-url = "https://api.anthropic.com"
-api_key = "sk-ant-api03-..."
+[[ai_configs]]
+name = "Primary Model"
+provider = "Claude"
+api_url = "https://api.anthropic.com"
+api_key = "sk-ant-..."
+model = "claude-3-5-sonnet-20241022"
 
-# Optional fallback model
-fallback_model = { name = "gemini-2.0-flash", url = "https://generativelanguage.googleapis.com", api_key = "AIza..." }
+[[ai_configs]]
+name = "Fallback Model"
+provider = "Gemini"
+api_url = "https://generativelanguage.googleapis.com"
+api_key = "AIza..."
+model = "gemini-2.0-flash"
 ```
 
 ## Model Configuration
 
-### Primary Model
+## Model Configuration
 
-The primary model is used for all AI analysis by default. Configure:
-- `name`: Model identifier (e.g., `claude-opus-4-5-20251101`)
-- `url`: Provider API endpoint
-- `api_key`: Your API key for the provider
+### AI Configs (List)
 
-### Fallback Model (Optional)
+Sentinel now uses a list of configurations (`ai_configs`). You can add multiple providers, and Sentinel will try them in order if any fails:
 
-The fallback model activates automatically if the primary model fails:
+- `name`: Human-readable identifier for the config
+- `provider`: One of `Claude`, `Gemini`, `OpenAI`, `Groq`, `Ollama`, `Kimi`, `DeepSeek`
+- `api_url`: The API endpoint
+- `api_key`: Your API key
+- `model`: The specific model ID (e.g., `claude-3-5-sonnet-20241022`)
 
-```
-Primary Model: Claude Opus (deep analysis)
-      ↓ (if fails)
-Fallback Model: Gemini Flash (fast response)
-```
-
-This ensures high availability and reduces workflow interruptions.
+The first successfully responding model in the list will be used for each task.
 
 ## Architecture Rules
 

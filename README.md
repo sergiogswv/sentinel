@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.5.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.6.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -18,11 +18,11 @@
 
 ## 🚀 What is Sentinel?
 
-Real-time monitoring tool written in **Rust** that analyzes code changes using **multiple AI providers** (Claude, Gemini, etc.) and manages workflow with Git. Designed for **NestJS/TypeScript** projects as an intelligent development assistant.
+Real-time monitoring tool written in **Rust** that analyzes code changes using **multiple AI providers** (Claude, Gemini, OpenAI, Groq, etc.) and manages workflow with Git. Designed for **diferent** projects as an intelligent development assistant.
 
 ### ✨ Key Features
 
-- 🤖 **Automatic AI Analysis** - Multi-model support (Claude, Gemini) with fallback
+- 🤖 **Automatic AI Analysis** - Multi-model support (Claude, Gemini, OpenAI, Groq, Ollama, etc.) with cascading fallback
 - 💾 **Smart Caching** - Reduces API costs up to 70%
 - 📊 **Real-time Metrics** - Tracking bugs, costs, tokens, and productivity
 - 🧪 **Automatic Tests** - Runs Jest with real-time output
@@ -185,7 +185,7 @@ Sentinel automatically protects your API keys:
 When you modify a child file (e.g., `call-inbound.ts`), Sentinel automatically detects the parent module (`call.service.ts`) and runs the complete module tests for better coverage.
 
 ### Multi-Model System
-Use Claude for deep analysis and Gemini as fast fallback. Switch providers without restarting.
+Use Claude, Gemini, Groq or local models (Ollama). Configure multiple providers and Sentinel will automatically fallback through the list if any fail.
 
 ### Smart Cache
 Reduce costs up to 70% by reusing responses for similar code.
@@ -216,9 +216,9 @@ Phase 1: ✅ Completed - Monitoring and basic analysis
 Phase 2: ✅ Completed - Productivity and documentation
 Phase 3: ✅ Completed - Optimization and stability
 Phase 4: ✅ Completed - Multi-model AI & Parent file detection (v4.2.0)
-Phase 5: 🚧 Planned - Multi-platform support (frameworks & languages)
-  → Sub-phase: 🌐 New AI Models (OpenAI, Mistral, Local models)
-Phase 6: 📅 Planned - Security (SecOps)
+Phase 5: ✅ Completed - Multi-platform support (frameworks & languages)
+  → Sub-phase: ✅ New AI Models (OpenAI, Groq, Ollama, Kimi, DeepSeek)
+Phase 6: 🚧 Planned - Security (SecOps)
 Phase 7: 📅 Planned - PR Review Automation (Elite)
 Phase 8: 📅 Planned - Enterprise & scalability
 ```

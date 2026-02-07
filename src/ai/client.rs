@@ -2,12 +2,17 @@
 //!
 //! Soporta múltiples proveedores:
 //! - Anthropic (Claude)
-//! - Google Gemini (Content API e Interactions API)
+//! - Google Gemini
+//! - OpenAI
+//! - Groq
+//! - Ollama
+//! - Kimi
+//! - DeepSeek
 //!
 //! Incluye sistema de fallback automático entre modelos.
 
 use crate::ai::cache::{guardar_en_cache, intentar_leer_cache};
-use crate::config::{ModelConfig, SentinelConfig};
+use crate::config::{AIConfig, AIProvider, SentinelConfig};
 use crate::stats::SentinelStats;
 use colored::*;
 use reqwest::blocking::Client;
@@ -37,18 +42,11 @@ pub fn consultar_ia_dinamico(
         }
     }
 
-    // 2. Usar modelo primario
-    let modelo_principal = &config.primary_model;
+    // 2. Intentar ejecución con Fallback
+    let resultado =
+        consultar_ia_con_fallback(prompt.clone(), &config.ai_configs, Arc::clone(&stats));
 
-    // 3. Intentar ejecución con Fallback
-    let resultado = ejecutar_con_fallback(
-        prompt.clone(),
-        modelo_principal,
-        config.fallback_model.as_ref(),
-        Arc::clone(&stats),
-    );
-
-    // 4. Guardar en Caché si tuvo éxito
+    // 3. Guardar en Caché si tuvo éxito
     if let Ok(ref res) = resultado {
         if config.use_cache {
             let _ = guardar_en_cache(&prompt, res, project_path);
@@ -58,55 +56,67 @@ pub fn consultar_ia_dinamico(
     resultado
 }
 
-fn ejecutar_con_fallback(
+pub fn consultar_ia_con_fallback(
     prompt: String,
-    principal: &ModelConfig,
-    fallback: Option<&ModelConfig>,
+    configs: &[AIConfig],
     stats: Arc<Mutex<SentinelStats>>,
 ) -> anyhow::Result<String> {
-    match consultar_ia(
-        prompt.clone(),
-        &principal.api_key,
-        &principal.url,
-        &principal.name,
-        Arc::clone(&stats),
-    ) {
-        Ok(res) => Ok(res),
-        Err(e) => {
-            if let Some(fb) = fallback {
-                println!(
-                    "{}",
-                    format!(
-                        "   ⚠️  Modelo principal falló: {}. Intentando fallback con {}...",
-                        e, fb.name
-                    )
-                    .yellow()
-                );
-                consultar_ia(prompt, &fb.api_key, &fb.url, &fb.name, stats)
-            } else {
-                Err(e)
+    if configs.is_empty() {
+        return Err(anyhow::anyhow!(
+            "No hay configuraciones de IA disponibles. Reinicia Sentinel para configurar una."
+        ));
+    }
+
+    let mut last_error = anyhow::anyhow!("Error desconocido");
+
+    for (i, config) in configs.iter().enumerate() {
+        if i > 0 {
+            println!(
+                "\n⚠️  El modelo '{}' falló. Intentando con el siguiente configurado: '{}'...",
+                configs[i - 1].name,
+                config.name
+            );
+        }
+
+        match consultar_ia(prompt.clone(), config.clone(), Arc::clone(&stats)) {
+            Ok(res) => {
+                if i > 0 {
+                    println!(
+                        "   ✅ El modelo '{}' respondió correctamente.\n",
+                        config.name
+                    );
+                }
+                return Ok(res);
+            }
+            Err(e) => {
+                println!("   ❌ Error en '{}': {}", config.name, e);
+                last_error = e;
             }
         }
     }
+
+    Err(anyhow::anyhow!(
+        "❌ Todos los modelos configurados fallaron. Último error: {}",
+        last_error
+    ))
 }
 
 pub fn consultar_ia(
     prompt: String,
-    api_key: &str,
-    base_url: &str,
-    model_name: &str,
+    config: AIConfig,
     stats: Arc<Mutex<SentinelStats>>,
 ) -> anyhow::Result<String> {
     let client = Client::new();
-
     let prompt_len = prompt.len();
-    let resultado = if base_url.contains("interactions") {
-        consultar_gemini_interactions(&client, prompt, api_key, base_url, model_name)
-    } else if base_url.contains("googleapis.com") {
-        consultar_gemini_content(&client, prompt, api_key, base_url, model_name)
-    } else {
-        // Por defecto asumimos estructura Anthropic (Claude)
-        consultar_anthropic(&client, prompt, api_key, base_url, model_name)
+
+    let resultado = match config.provider {
+        AIProvider::Claude => consultar_claude(&client, prompt, &config),
+        AIProvider::Gemini => consultar_gemini(&client, prompt, &config),
+        AIProvider::OpenAI
+        | AIProvider::Groq
+        | AIProvider::Ollama
+        | AIProvider::Kimi
+        | AIProvider::DeepSeek => consultar_openai_compatible(&client, prompt, &config),
     };
 
     if let Ok(ref res) = resultado {
@@ -122,76 +132,35 @@ pub fn consultar_ia(
     resultado
 }
 
-fn consultar_gemini_interactions(
-    client: &Client,
-    prompt: String,
-    api_key: &str,
-    base_url: &str,
-    model_name: &str,
-) -> anyhow::Result<String> {
+fn consultar_claude(client: &Client, prompt: String, config: &AIConfig) -> anyhow::Result<String> {
+    let url = format!("{}/v1/messages", config.api_url.trim_end_matches('/'));
     let response = client
-        .post(base_url)
-        .header("x-goog-api-key", api_key)
+        .post(&url)
+        .header("x-api-key", &config.api_key)
+        .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
         .json(&json!({
-            "model": model_name,
-            "input": prompt
+            "model": config.model,
+            "max_tokens": 1500,
+            "messages": [{"role": "user", "content": prompt}]
         }))
         .send()?;
 
-    let status = response.status();
-    let body_text = response.text()?;
-
-    if !status.is_success() {
-        return Err(anyhow::anyhow!(
-            "Error de API Gemini Interactions (Status {}): {}",
-            status,
-            body_text
-        ));
-    }
-
-    let body: serde_json::Value = serde_json::from_str(&body_text)?;
-
-    body["output"]
-        .as_str()
-        .or_else(|| {
-            body["outputs"].as_array().and_then(|outputs| {
-                outputs
-                    .iter()
-                    .find(|o| o["type"] == "text")
-                    .and_then(|o| o["text"].as_str())
-            })
-        })
-        .or_else(|| body["candidates"][0]["content"]["parts"][0]["text"].as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "No se pudo encontrar el texto en la respuesta de Gemini Interactions. Body: {}",
-                body_text
-            )
-        })
+    procesar_respuesta_json(response, "Claude", |json| {
+        json["content"][0]["text"].as_str().map(|s| s.to_string())
+    })
 }
 
-fn consultar_gemini_content(
-    client: &Client,
-    prompt: String,
-    api_key: &str,
-    base_url: &str,
-    model_name: &str,
-) -> anyhow::Result<String> {
-    let url = if base_url.contains("generateContent") {
-        base_url.to_string()
-    } else {
-        format!(
-            "{}/v1beta/models/{}:generateContent",
-            base_url.trim_end_matches('/'),
-            model_name
-        )
-    };
+fn consultar_gemini(client: &Client, prompt: String, config: &AIConfig) -> anyhow::Result<String> {
+    let url = format!(
+        "{}/v1beta/models/{}:generateContent?key={}",
+        config.api_url.trim_end_matches('/'),
+        config.model,
+        config.api_key
+    );
 
     let response = client
         .post(&url)
-        .header("x-goog-api-key", api_key)
         .header("content-type", "application/json")
         .json(&json!({
             "contents": [{
@@ -200,58 +169,70 @@ fn consultar_gemini_content(
         }))
         .send()?;
 
-    let status = response.status();
-    let body_text = response.text()?;
-
-    if !status.is_success() {
-        return Err(anyhow::anyhow!(
-            "Error de API Gemini (Status {}): {}",
-            status,
-            body_text
-        ));
-    }
-
-    let body: serde_json::Value = serde_json::from_str(&body_text)?;
-    body["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow::anyhow!("Estructura de Gemini inesperada. Body: {}", body_text))
+    procesar_respuesta_json(response, "Gemini", |json| {
+        json["candidates"][0]["content"]["parts"][0]["text"]
+            .as_str()
+            .map(|s| s.to_string())
+    })
 }
 
-fn consultar_anthropic(
+fn consultar_openai_compatible(
     client: &Client,
     prompt: String,
-    api_key: &str,
-    base_url: &str,
-    model_name: &str,
+    config: &AIConfig,
 ) -> anyhow::Result<String> {
-    let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
+    let url = format!("{}/chat/completions", config.api_url.trim_end_matches('/'));
 
-    let response = client
-        .post(&url)
-        .header("x-api-key", api_key)
-        .header("content-type", "application/json")
+    let mut request = client.post(&url).header("content-type", "application/json");
+
+    if !config.api_key.is_empty() {
+        request = request.header("authorization", format!("Bearer {}", config.api_key));
+    }
+
+    let response = request
         .json(&json!({
-            "model": model_name,
-            "max_tokens": 1500,
-            "messages": [{"role": "user", "content": prompt}]
+            "model": config.model,
+            "messages": [
+                {"role": "system", "content": "Eres un Arquitecto de Software Senior."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1
         }))
         .send()?;
 
+    procesar_respuesta_json(response, "API Compatible", |json| {
+        json["choices"][0]["message"]["content"]
+            .as_str()
+            .map(|s| s.to_string())
+    })
+}
+
+fn procesar_respuesta_json<F>(
+    response: reqwest::blocking::Response,
+    provider_name: &str,
+    extractor: F,
+) -> anyhow::Result<String>
+where
+    F: FnOnce(serde_json::Value) -> Option<String>,
+{
     let status = response.status();
     let body_text = response.text()?;
 
     if !status.is_success() {
         return Err(anyhow::anyhow!(
-            "Error de API Anthropic (Status {}): {}",
+            "Error de API {} (Status {}): {}",
+            provider_name,
             status,
             body_text
         ));
     }
 
-    let body: serde_json::Value = serde_json::from_str(&body_text)?;
-    body["content"][0]["text"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| anyhow::anyhow!("Estructura de Anthropic inesperada. Body: {}", body_text))
+    let json: serde_json::Value = serde_json::from_str(&body_text)?;
+    extractor(json).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Estructura de respuesta de {} inesperada. Body: {}",
+            provider_name,
+            body_text
+        )
+    })
 }

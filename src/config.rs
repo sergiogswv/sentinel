@@ -17,6 +17,40 @@ pub struct FrameworkDetection {
     pub test_patterns: Vec<String>, // Patrones de ubicación de tests (ej: ["test/{name}/{name}.spec.ts"])
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum AIProvider {
+    Claude,
+    Gemini,
+    OpenAI,
+    Groq,
+    Ollama,
+    Kimi,
+    DeepSeek,
+}
+
+impl AIProvider {
+    pub fn as_str(&self) -> &str {
+        match self {
+            AIProvider::Claude => "Claude",
+            AIProvider::Gemini => "Gemini",
+            AIProvider::OpenAI => "OpenAI",
+            AIProvider::Groq => "Groq",
+            AIProvider::Ollama => "Ollama",
+            AIProvider::Kimi => "Kimi",
+            AIProvider::DeepSeek => "DeepSeek",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AIConfig {
+    pub name: String,
+    pub provider: AIProvider,
+    pub api_url: String,
+    pub api_key: String,
+    pub model: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ModelConfig {
     pub name: String,
@@ -43,12 +77,11 @@ pub struct SentinelConfig {
     pub test_command: String,
     pub architecture_rules: Vec<String>,
     pub file_extensions: Vec<String>, // Extensiones de archivo a monitorear
-    pub code_language: String, // Lenguaje para bloques de código (detectado por IA)
+    pub code_language: String,        // Lenguaje para bloques de código (detectado por IA)
     pub parent_patterns: Vec<String>, // Patrones de archivos padre específicos del framework
     pub test_patterns: Vec<String>, // Patrones de ubicación de tests (usa {name} como placeholder)
     pub ignore_patterns: Vec<String>,
-    pub primary_model: ModelConfig,
-    pub fallback_model: Option<ModelConfig>,
+    pub ai_configs: Vec<AIConfig>,
     pub use_cache: bool,
     // Testing framework detection
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,12 +101,6 @@ impl SentinelConfig {
         parent_patterns: Vec<String>,
         test_patterns: Vec<String>,
     ) -> Self {
-        let default_model = ModelConfig {
-            name: "claude-opus-4-5-20251101".to_string(),
-            url: "https://api.anthropic.com".to_string(),
-            api_key: "".to_string(),
-        };
-
         Self {
             version: SENTINEL_VERSION.to_string(),
             project_name: name,
@@ -95,8 +122,13 @@ impl SentinelConfig {
                 "vendor".to_string(),
                 "__pycache__".to_string(),
             ],
-            primary_model: default_model,
-            fallback_model: None,
+            ai_configs: vec![AIConfig {
+                name: "Claude Default".to_string(),
+                provider: AIProvider::Claude,
+                api_url: "https://api.anthropic.com".to_string(),
+                api_key: "".to_string(),
+                model: "claude-3-5-sonnet-20241022".to_string(),
+            }],
             use_cache: true,
             testing_framework: None,
             testing_status: None,
@@ -168,7 +200,11 @@ impl SentinelConfig {
             if config.version != SENTINEL_VERSION {
                 println!(
                     "{}",
-                    format!("   🔄 Migrando configuración de versión {} a {}...", config.version, SENTINEL_VERSION).yellow()
+                    format!(
+                        "   🔄 Migrando configuración de versión {} a {}...",
+                        config.version, SENTINEL_VERSION
+                    )
+                    .yellow()
                 );
                 config = Self::migrar_config(config, path);
                 // Guardar la configuración migrada
@@ -194,7 +230,10 @@ impl SentinelConfig {
         }
 
         if let Ok(old_config) = toml::from_str::<SentinelConfigV1>(&content) {
-            println!("{}", "   🔄 Detectada configuración antigua, migrando...".yellow());
+            println!(
+                "{}",
+                "   🔄 Detectada configuración antigua, migrando...".yellow()
+            );
 
             // Crear nueva configuración con valores migrados o defaults
             let nombre = old_config.project_name.unwrap_or_else(|| {
@@ -204,13 +243,13 @@ impl SentinelConfig {
                     .to_string()
             });
 
-            let gestor = old_config.manager.unwrap_or_else(|| {
-                Self::detectar_gestor(path)
-            });
+            let gestor = old_config
+                .manager
+                .unwrap_or_else(|| Self::detectar_gestor(path));
 
-            let framework = old_config.framework.unwrap_or_else(|| {
-                "JavaScript/TypeScript".to_string()
-            });
+            let framework = old_config
+                .framework
+                .unwrap_or_else(|| "JavaScript/TypeScript".to_string());
 
             let rules = old_config.architecture_rules.unwrap_or_else(|| {
                 vec![
@@ -220,9 +259,9 @@ impl SentinelConfig {
                 ]
             });
 
-            let extensions = old_config.file_extensions.unwrap_or_else(|| {
-                vec!["js".to_string(), "ts".to_string()]
-            });
+            let extensions = old_config
+                .file_extensions
+                .unwrap_or_else(|| vec!["js".to_string(), "ts".to_string()]);
 
             // Inferir code_language basado en extensiones (fallback)
             let code_language = if extensions.contains(&"ts".to_string()) {
@@ -257,14 +296,48 @@ impl SentinelConfig {
                 vec!["{name}.test.{ext}".to_string()]
             };
 
-            let mut new_config = Self::default(nombre, gestor, framework, rules, extensions, code_language, parent_patterns, test_patterns);
+            let mut new_config = Self::default(
+                nombre,
+                gestor,
+                framework,
+                rules,
+                extensions,
+                code_language,
+                parent_patterns,
+                test_patterns,
+            );
 
             // Preservar valores sensibles de la config antigua
             if let Some(model) = old_config.primary_model {
-                new_config.primary_model = model;
-            }
-            if let Some(fallback) = old_config.fallback_model {
-                new_config.fallback_model = Some(fallback);
+                new_config.ai_configs = vec![AIConfig {
+                    name: "Primary Model".to_string(),
+                    provider: if model.url.contains("anthropic") {
+                        AIProvider::Claude
+                    } else if model.url.contains("googleapis") {
+                        AIProvider::Gemini
+                    } else {
+                        AIProvider::OpenAI
+                    },
+                    api_url: model.url,
+                    api_key: model.api_key,
+                    model: model.name,
+                }];
+
+                if let Some(fallback) = old_config.fallback_model {
+                    new_config.ai_configs.push(AIConfig {
+                        name: "Fallback Model".to_string(),
+                        provider: if fallback.url.contains("anthropic") {
+                            AIProvider::Claude
+                        } else if fallback.url.contains("googleapis") {
+                            AIProvider::Gemini
+                        } else {
+                            AIProvider::OpenAI
+                        },
+                        api_url: fallback.url,
+                        api_key: fallback.api_key,
+                        model: fallback.name,
+                    });
+                }
             }
             if let Some(cache) = old_config.use_cache {
                 new_config.use_cache = cache;
@@ -411,9 +484,10 @@ impl SentinelConfig {
         }
 
         // 2. Validar que tenga una extensión permitida
-        let tiene_extension_valida = self.file_extensions.iter().any(|ext| {
-            path_str.ends_with(&format!(".{}", ext))
-        });
+        let tiene_extension_valida = self
+            .file_extensions
+            .iter()
+            .any(|ext| path_str.ends_with(&format!(".{}", ext)));
 
         if !tiene_extension_valida {
             return true;

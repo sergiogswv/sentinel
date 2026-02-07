@@ -4,25 +4,138 @@ This guide covers the requirements, installation steps, initial configuration, a
 
 ## Requirements
 
-- [Rust](https://www.rust-lang.org/tools/install) (edition 2024)
+- **Git** 2.0+ (required for auto-updates)
+- **Rust** 1.70+ (automatically installed if missing)
 - API Key from at least one AI provider (Claude or Gemini recommended)
+- **Internet connection** (for initial installation and updates)
 
-## Installation Steps
+## Installation Methods
 
-### 1. Clone the repository
+### 🚀 Method 1: Automatic Installation (Recommended)
+
+The automatic installers will:
+- ✅ Check and install dependencies (Git, Rust)
+- ✅ Clone or update the repository
+- ✅ Compile and install the binary
+- ✅ Add Sentinel to your PATH
+- ✅ Create auto-update scripts
+
+#### Linux/macOS
 
 ```bash
-git clone https://github.com/<tu-usuario>/sentinel-rust.git
+# Quick install (one-liner)
+curl -sSL https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.sh | bash
+
+# Or download and run
+wget https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.sh
+chmod +x install.sh
+./install.sh
+```
+
+#### Windows
+
+**PowerShell (Recommended):**
+```powershell
+# One-liner (run as Administrator or normal user)
+irm https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.ps1 | iex
+
+# Or download and run
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.ps1" -OutFile "install.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\install.ps1
+```
+
+**CMD/Batch:**
+```cmd
+# Download install.bat from the repository
+# Then double-click it or run:
+install.bat
+```
+
+After installation:
+- **Linux/macOS**: Binary installed at `/usr/local/bin/sentinel`
+- **Windows**: Binary installed at `%USERPROFILE%\.local\bin\sentinel.exe`
+
+### 📦 Method 2: Manual Installation
+
+If you prefer manual control:
+
+#### 1. Clone the repository
+
+```bash
+git clone https://github.com/sergiogswv/sentinel-rust.git
 cd sentinel-rust
 ```
 
-### 2. Compile in release mode
+#### 2. Use the installation script
+
+```bash
+# Linux/macOS
+chmod +x install.sh
+./install.sh
+
+# Windows PowerShell
+.\install.ps1
+
+# Windows CMD
+install.bat
+```
+
+#### 3. Or compile manually
 
 ```bash
 cargo build --release
 ```
 
-The compiled binary will be located at `target/release/sentinel-rust` (or `sentinel-rust.exe` on Windows).
+The compiled binary will be at:
+- **Linux/macOS**: `target/release/sentinel-rust`
+- **Windows**: `target\release\sentinel-rust.exe`
+
+To install manually:
+
+**Linux/macOS:**
+```bash
+sudo cp target/release/sentinel-rust /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+```
+
+**Windows:**
+```powershell
+# Create directory
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.local\bin"
+
+# Copy binary
+Copy-Item target\release\sentinel-rust.exe "$env:USERPROFILE\.local\bin\sentinel.exe"
+
+# Add to PATH (add this directory to your system PATH)
+```
+
+## Updating Sentinel
+
+### 🔄 Auto-Update
+
+The installers create convenient update commands:
+
+```bash
+# All platforms (after using auto-installer)
+sentinel-update
+```
+
+Or run the update scripts directly:
+- **Linux/macOS**: `~/.sentinel/update.sh`
+- **Windows**: `%USERPROFILE%\.sentinel\update.ps1` or `update.bat`
+
+### 🔄 Manual Update
+
+```bash
+cd ~/.sentinel  # Linux/macOS
+# cd %USERPROFILE%\.sentinel  # Windows
+
+git pull origin master
+cargo build --release
+
+# Then copy the binary as shown in manual installation
+```
 
 ## Initial Configuration
 

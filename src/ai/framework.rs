@@ -80,7 +80,7 @@ pub fn detectar_framework_con_ia(
           \"rules\": [\"4 principios técnicos clave\"],\n\
           \"extensions\": [\"ts\", \"tsx\", \"js\", etc],\n\
           \"parent_patterns\": [\"sufijos de arquitectura\"],\n\
-          \"test_patterns\": [\"rutas de tests con {{{{name}}}}\"]\n\
+          \"test_patterns\": [\"rutas de tests con {{name}}\"]\n\
         }}\n\n\
         IMPORTANTE: Si no hay un framework claro, identifica la librería de entrada (entry-point) principal. \
         Prohibido responder con nombres genéricos como \"JavaScript/TypeScript\".",

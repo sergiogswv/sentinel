@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.4.3-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.5.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -44,17 +44,55 @@ Real-time monitoring tool written in **Rust** that analyzes code changes using *
 
 ### Installation
 
+#### 🚀 Quick Install (Recommended)
+
+**Linux/macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/sergiogswv/sentinel-rust/master/install.ps1 | iex
+```
+
+**Windows (Batch):**
+```cmd
+# Download install.bat and run it
+install.bat
+```
+
+#### 📦 Manual Installation
+
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/sentinel-rust.git
+git clone https://github.com/sergiogswv/sentinel-rust.git
 cd sentinel-rust
 
-# 2. Build
-cargo build --release
+# 2. Run the installer script
+# Linux/macOS:
+chmod +x install.sh && ./install.sh
 
-# 3. Run
-./target/release/sentinel-rust
+# Windows PowerShell:
+.\install.ps1
+
+# Windows CMD:
+install.bat
+
+# Or build manually:
+cargo build --release
+./target/release/sentinel-rust  # Linux/macOS
+.\target\release\sentinel-rust.exe  # Windows
 ```
+
+#### 🔄 Updating Sentinel
+
+After installation, update easily with:
+```bash
+sentinel-update  # All platforms
+```
+
+**[📖 Complete Installation Guide →](README_INSTALLER.md)**
 
 On first use, Sentinel will start an **interactive configuration wizard**.
 

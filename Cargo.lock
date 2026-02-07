@@ -915,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "sentinel-rust"
-version = "4.4.2"
+version = "4.5.0"
 dependencies = [
  "anyhow",
  "colored",
@@ -923,6 +923,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "toml",
 ]

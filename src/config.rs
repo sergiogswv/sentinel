@@ -12,6 +12,9 @@ pub struct FrameworkDetection {
     pub framework: String,
     pub rules: Vec<String>,
     pub extensions: Vec<String>,
+    pub code_language: String, // Lenguaje para bloques de código (ej: "typescript", "python", "go")
+    pub parent_patterns: Vec<String>, // Patrones de archivos padre (ej: [".service.ts", ".controller.ts"])
+    pub test_patterns: Vec<String>, // Patrones de ubicación de tests (ej: ["test/{name}/{name}.spec.ts"])
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -40,10 +43,18 @@ pub struct SentinelConfig {
     pub test_command: String,
     pub architecture_rules: Vec<String>,
     pub file_extensions: Vec<String>, // Extensiones de archivo a monitorear
+    pub code_language: String, // Lenguaje para bloques de código (detectado por IA)
+    pub parent_patterns: Vec<String>, // Patrones de archivos padre específicos del framework
+    pub test_patterns: Vec<String>, // Patrones de ubicación de tests (usa {name} como placeholder)
     pub ignore_patterns: Vec<String>,
     pub primary_model: ModelConfig,
     pub fallback_model: Option<ModelConfig>,
     pub use_cache: bool,
+    // Testing framework detection
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub testing_framework: Option<String>, // Framework de testing principal (ej: "Jest", "Pytest")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub testing_status: Option<String>, // Estado: "valid", "incomplete", "missing"
 }
 
 impl SentinelConfig {
@@ -53,6 +64,9 @@ impl SentinelConfig {
         framework: String,
         rules: Vec<String>,
         extensions: Vec<String>,
+        code_language: String,
+        parent_patterns: Vec<String>,
+        test_patterns: Vec<String>,
     ) -> Self {
         let default_model = ModelConfig {
             name: "claude-opus-4-5-20251101".to_string(),
@@ -68,6 +82,9 @@ impl SentinelConfig {
             test_command: format!("{} run test", manager),
             architecture_rules: rules,
             file_extensions: extensions,
+            code_language,
+            parent_patterns,
+            test_patterns,
             ignore_patterns: vec![
                 "node_modules".to_string(),
                 "dist".to_string(),
@@ -81,6 +98,8 @@ impl SentinelConfig {
             primary_model: default_model,
             fallback_model: None,
             use_cache: true,
+            testing_framework: None,
+            testing_status: None,
         }
     }
 
@@ -205,7 +224,40 @@ impl SentinelConfig {
                 vec!["js".to_string(), "ts".to_string()]
             });
 
-            let mut new_config = Self::default(nombre, gestor, framework, rules, extensions);
+            // Inferir code_language basado en extensiones (fallback)
+            let code_language = if extensions.contains(&"ts".to_string()) {
+                "typescript".to_string()
+            } else if extensions.contains(&"js".to_string()) {
+                "javascript".to_string()
+            } else if extensions.contains(&"py".to_string()) {
+                "python".to_string()
+            } else if extensions.contains(&"go".to_string()) {
+                "go".to_string()
+            } else if extensions.contains(&"rs".to_string()) {
+                "rust".to_string()
+            } else {
+                "code".to_string()
+            };
+
+            // Inferir parent_patterns basados en framework detectado (fallback)
+            let parent_patterns = if framework.to_lowercase().contains("nest") {
+                vec![
+                    ".service.ts".to_string(),
+                    ".controller.ts".to_string(),
+                    ".repository.ts".to_string(),
+                ]
+            } else {
+                vec![]
+            };
+
+            // Inferir test_patterns basados en framework detectado (fallback)
+            let test_patterns = if framework.to_lowercase().contains("nest") {
+                vec!["test/{name}/{name}.spec.ts".to_string()]
+            } else {
+                vec!["{name}.test.{ext}".to_string()]
+            };
+
+            let mut new_config = Self::default(nombre, gestor, framework, rules, extensions, code_language, parent_patterns, test_patterns);
 
             // Preservar valores sensibles de la config antigua
             if let Some(model) = old_config.primary_model {
@@ -273,6 +325,74 @@ impl SentinelConfig {
                 "SOLID Principles".to_string(),
                 "Best Practices".to_string(),
             ];
+        }
+
+        // Asegurar que exista code_language (fallback basado en extensiones)
+        if config.code_language.is_empty() {
+            config.code_language = if config.file_extensions.contains(&"ts".to_string()) {
+                "typescript".to_string()
+            } else if config.file_extensions.contains(&"js".to_string()) {
+                "javascript".to_string()
+            } else if config.file_extensions.contains(&"py".to_string()) {
+                "python".to_string()
+            } else if config.file_extensions.contains(&"go".to_string()) {
+                "go".to_string()
+            } else if config.file_extensions.contains(&"rs".to_string()) {
+                "rust".to_string()
+            } else {
+                "code".to_string()
+            };
+        }
+
+        // Asegurar que existan parent_patterns (fallback basado en framework/lenguaje)
+        if config.parent_patterns.is_empty() {
+            config.parent_patterns = if config.framework.to_lowercase().contains("nest") {
+                vec![
+                    ".service.ts".to_string(),
+                    ".controller.ts".to_string(),
+                    ".repository.ts".to_string(),
+                    ".gateway.ts".to_string(),
+                    ".module.ts".to_string(),
+                ]
+            } else if config.code_language == "python" {
+                vec![
+                    "_service.py".to_string(),
+                    "_controller.py".to_string(),
+                    "_repository.py".to_string(),
+                ]
+            } else if config.code_language == "go" {
+                vec![
+                    "_service.go".to_string(),
+                    "_handler.go".to_string(),
+                    "_repository.go".to_string(),
+                ]
+            } else {
+                vec![] // Sin patrones específicos para otros frameworks
+            };
+        }
+
+        // Asegurar que existan test_patterns (fallback basado en framework/lenguaje)
+        if config.test_patterns.is_empty() {
+            config.test_patterns = if config.framework.to_lowercase().contains("nest") {
+                vec![
+                    "test/{name}/{name}.spec.ts".to_string(),
+                    "src/{name}/{name}.spec.ts".to_string(),
+                ]
+            } else if config.code_language == "python" {
+                vec![
+                    "tests/test_{name}.py".to_string(),
+                    "{name}/tests.py".to_string(),
+                ]
+            } else if config.code_language == "go" {
+                vec!["{name}_test.go".to_string()]
+            } else if config.code_language == "php" {
+                vec![
+                    "tests/Unit/{Name}Test.php".to_string(),
+                    "tests/Feature/{Name}Test.php".to_string(),
+                ]
+            } else {
+                vec!["{name}.test.{ext}".to_string()] // Patrón genérico
+            };
         }
 
         config

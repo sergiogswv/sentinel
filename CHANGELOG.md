@@ -5,6 +5,107 @@ All notable changes to Sentinel will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2025-02-05
+
+### 🚀 New Features
+
+- **Detección Inteligente de Testing Frameworks**: Nuevo sistema de análisis automático de frameworks de testing
+  - Detecta frameworks instalados (Jest, Pytest, Vitest, Cypress, PHPUnit, etc.)
+  - Valida configuraciones existentes (archivos de configuración, dependencias)
+  - Sugiere frameworks apropiados basados en el framework principal del proyecto
+  - Soporte multi-lenguaje: JavaScript/TypeScript, Python, PHP, Rust, Go, Java
+  - Estado de testing: `valid`, `incomplete`, o `missing`
+
+### ✨ Enhanced
+
+- **Recomendaciones Contextuales**: Las sugerencias de testing se adaptan al framework detectado:
+  - **React/Next.js**: Prioriza Jest, Vitest, Cypress
+  - **NestJS**: Recomienda Jest (integrado por defecto) + Supertest
+  - **Django/FastAPI**: Sugiere Pytest como estándar
+  - **Laravel**: PHPUnit o Pest con Laravel Dusk para E2E
+  - **Rust/Go**: Frameworks de testing nativos del lenguaje
+
+### 🧪 Testing Intelligence
+
+- **Análisis Estático**: Detecta archivos de configuración (jest.config.js, pytest.ini, etc.)
+- **Análisis de Dependencias**: Verifica package.json, requirements.txt, composer.json, Cargo.toml
+- **Validación con IA**: Confirma y mejora recomendaciones usando el modelo configurado
+- **Comandos de Instalación**: Genera comandos específicos según el gestor de paquetes (npm/yarn/pnpm/pip/composer)
+
+### 📊 New Configuration Fields
+
+```toml
+[config]
+testing_framework = "Jest"           # Framework de testing detectado
+testing_status = "valid"             # Estado: valid|incomplete|missing
+```
+
+### 🎨 UI Improvements
+
+- Resumen visual colorido del análisis de testing
+- Indicadores de prioridad para sugerencias (🔥 alta, ⭐ media, 💡 baja)
+- Información detallada sobre frameworks detectados y archivos de configuración
+
+### 🏗️ Architecture
+
+- Nuevo módulo `src/ai/testing.rs` (450+ líneas)
+  - `TestingFrameworkInfo`: Estructura de información de testing
+  - `TestingStatus`: Enum para estados (Valid, Incomplete, Missing)
+  - `TestingSuggestion`: Sugerencias con prioridad y comandos de instalación
+  - `detectar_testing_framework()`: Función principal de detección
+  - Soporte para 20+ frameworks de testing populares
+
+### 🔧 Technical Details
+
+- Integración con proceso de inicialización (`inicializar_sentinel`)
+- Detección automática durante `sentinel init`
+- Backwards compatible: campos opcionales en configuración
+- Sin warnings de compilación
+
+---
+
+## [4.4.3] - 2025-02-05
+
+### 🏗️ Refactored
+
+- **Modularización del sistema AI**: Refactorizado `ai.rs` (678 líneas) en estructura modular organizada:
+  - `src/ai/mod.rs` - Definición del módulo y re-exports públicos
+  - `src/ai/cache.rs` - Sistema de caché con almacenamiento basado en hash
+  - `src/ai/client.rs` - Comunicación con APIs de IA (Anthropic, Gemini)
+  - `src/ai/framework.rs` - Detección automática de frameworks con IA
+  - `src/ai/analysis.rs` - Análisis de arquitectura de código
+  - `src/ai/utils.rs` - Utilidades para procesamiento de respuestas (extraer/eliminar bloques de código)
+
+### ✨ Improved
+
+- **Mejor mantenibilidad**: Código organizado por responsabilidad única
+- **Navegación mejorada**: Fácil localizar funcionalidades específicas
+- **Testing aislado**: Tests unitarios incluidos en `utils.rs`
+- **Documentación clara**: Cada módulo documenta su propósito con comentarios `//!`
+- **Escalabilidad**: Estructura preparada para agregar nuevos proveedores de IA
+
+### 🔧 Internal Changes
+
+- Optimización de re-exports públicos: Solo se exportan funciones usadas fuera del módulo AI
+- Funciones internas (`consultar_ia`, `eliminar_bloques_codigo`, `extraer_codigo`) ahora son privadas al módulo
+- Imports internos actualizados para usar rutas del submódulo (`crate::ai::client::consultar_ia`)
+- Compilación limpia sin warnings
+
+### 📝 Documentation
+
+- **ESTRUCTURA.md**: Actualizado con nueva estructura modular de `src/ai/`
+- **docs/architecture.md**: Actualizado diagrama de componentes y estructura de archivos
+- Documentación inline completa en cada submódulo
+
+### 💡 Benefits
+
+- **Legibilidad**: 6 archivos especializados vs 1 archivo monolítico
+- **Separación de responsabilidades**: Cache, client, framework, analysis, utils claramente divididos
+- **Facilita contribuciones**: Desarrolladores pueden trabajar en módulos independientes
+- **Preparado para el futuro**: Estructura extensible para nuevos proveedores de IA
+
+---
+
 ## [4.4.2] - 2025-02-05
 
 ### 🐛 Fixed

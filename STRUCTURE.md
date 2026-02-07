@@ -56,7 +56,7 @@ The AI module has been refactored into specialized submodules for better maintai
 
 #### `ai/mod.rs`
 - Defines the module and its public re-exports
-- Public API: `analizar_arquitectura`, `limpiar_cache`, `consultar_ia_dinamico`, `TaskType`, `detectar_framework_con_ia`, `listar_modelos_gemini`
+- Public API: `analizar_arquitectura`, `limpiar_cache`, `consultar_ia_dinamico`, `TaskType`, `detectar_framework_con_ia`
 
 #### `ai/cache.rs`
 **Responsibility**: AI response caching system
@@ -74,8 +74,8 @@ The AI module has been refactored into specialized submodules for better maintai
 **Responsibility**: Communication with AI provider APIs
 
 **Public functions**:
-- `consultar_ia_dinamico(prompt, task_type, config, stats, project_path)` - Entry point with cache and fallback
-- `consultar_ia(prompt, api_key, base_url, model_name, stats)` - Multi-provider base client
+- `consultar_ia_dinamico(prompt, task_type, config, stats, project_path)` - Entry point with cache and sequential fallback through all configured providers
+- `consultar_ia(prompt, config, stats)` - Generic provider-agnostic client
 - `TaskType` enum - Light (commits, docs) vs Deep (architecture, debug)
 
 **Provider implementations**:
@@ -84,7 +84,7 @@ The AI module has been refactored into specialized submodules for better maintai
 - `consultar_gemini_interactions()` - Google Gemini Interactions API
 
 **Fallback system**:
-- `ejecutar_con_fallback()` - Tries primary model, automatic fallback if fails
+- Sequential fallback: Iterates through `config.ai_configs`, attempting each provider until one succeeds.
 - Token and cost tracking per query
 
 **Dependencies**:
@@ -97,7 +97,6 @@ The AI module has been refactored into specialized submodules for better maintai
 
 **Public functions**:
 - `detectar_framework_con_ia(project_path, config)` - Analyzes project and detects framework
-- `listar_modelos_gemini(api_key)` - Gets available Gemini models
 
 **Private functions**:
 - `parsear_deteccion_framework(respuesta)` - JSON parser with fallback to generic configuration
@@ -345,9 +344,18 @@ The AI module has been refactored into specialized submodules for better maintai
 **Data structure**:
 ```rust
 pub struct SentinelConfig {
-    pub nombre_proyecto: String,
-    pub gestor_paquetes: String,
-    pub ignorar_patrones: Vec<String>,
+    pub version: String,
+    pub project_name: String,
+    pub manager: String,
+    pub framework: String,
+    pub architecture_rules: Vec<String>,
+    pub file_extensions: Vec<String>,
+    pub code_language: String,
+    pub parent_patterns: Vec<String>,
+    pub test_patterns: Vec<String>,
+    pub ignore_patterns: Vec<String>,
+    pub ai_configs: Vec<AIConfig>,
+    pub use_cache: bool,
 }
 ```
 
@@ -433,13 +441,14 @@ pub struct SentinelStats {
        │         └──▶ If child, uses parent name for tests
        │         └──▶ If not child, uses current file name
        │
-       ├──▶ ai::analizar_arquitectura()  (advice in console, code in .suggested)
-       │         └──▶ ai::client::consultar_ia_dinamico()  (v4.4.3 modularized)
-       │               ├──▶ ai::cache::intentar_leer_cache() [if use_cache=true]
-       │               ├──▶ ai::client::ejecutar_con_fallback() [if no cache]
-       │               │     ├──▶ Tries primary_model
-       │               │     └──▶ Tries fallback_model [if primary fails]
-       │               └──▶ ai::cache::guardar_en_cache() [if success]
+        ├──▶ ai::analizar_arquitectura()  (advice in console, code in .suggested)
+        │         └──▶ ai::client::consultar_ia_dinamico()  (v4.6.0 multi-provider)
+        │               ├──▶ ai::cache::intentar_leer_cache() [if use_cache=true]
+        │               ├──▶ ai::client::consultar_ia() [if no cache, iterates providers]
+        │               │     ├──▶ Tries Config #1
+        │               │     ├──▶ Tries Config #2 [if #1 fails]
+        │               │     └──▶ ... and so on
+        │               └──▶ ai::cache::guardar_en_cache() [if success]
        │         └──▶ ai::utils::extraer_codigo() [extracts suggested code]
        │         └──▶ ai::utils::eliminar_bloques_codigo() [shows advice]
        │         └──▶ stats::incrementar_bugs_evitados() [if critical]

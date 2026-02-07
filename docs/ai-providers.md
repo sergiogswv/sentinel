@@ -7,9 +7,9 @@ Sentinel can work with multiple AI providers. Choose the one that best suits you
 ### Anthropic Claude (Recommended)
 
 **Available models:**
-- `claude-opus-4-5-20251101` - Most powerful, deep analysis
-- `claude-sonnet-4-20250514` - Balanced, good quality/cost ratio
-- `claude-haiku-3-5-20241022` - Fast and economical
+- `claude-3-5-sonnet-20241022` - Most powerful, deep analysis
+- `claude-3-opus-20240229` - Balanced, good quality/cost ratio
+- `claude-3-haiku-20240307` - Fast and economical
 
 **Configuration:**
 - URL: `https://api.anthropic.com`
@@ -60,27 +60,42 @@ api_key = "AIza..."
 
 ---
 
-## Fallback System
+### OpenAI & Compatible (Groq, Ollama, Kimi, DeepSeek)
 
-You can configure a backup model that will activate automatically if the primary model fails:
+Sentinel now supports any OpenAI-compatible API. This includes:
+- **Groq**: Extremely fast inference (Llama 3, Mixtral)
+- **Ollama**: Local models for privacy and 0 cost
+- **Kimi / DeepSeek**: Efficient models with specialized capabilities
+
+**Note:** Sentinel automatically fetches available models from these providers during configuration.
+
+---
+
+## Cascading Fallback System
+
+Unlike previous versions, Sentinel now supports **cascading fallback**. You can configure a list of $N$ providers, and Sentinel will try them sequentially:
 
 ```
-Primary Model: Claude Opus (deep analysis)
+1. Claude 3.5 Sonnet (Primary)
       ↓ (if fails)
-Fallback Model: Gemini Flash (fast response)
+2. Groq Llama 3 (Fast Fallback)
+      ↓ (if fails)
+3. Gemini Flash (Reliable Fallback)
+      ↓ (if fails)
+4. Ollama Local (Last Resort)
 ```
 
-This ensures high availability and reduces workflow interruptions.
+This ensures maximum availability and resilience.
 
-### Configuring Fallback
+### Configuring Providers
 
-**During initial setup:**
-```
-👉 ¿Configurar un modelo de respaldo por si falla el principal? (s/n): s
-👉 API Key: [tu-api-key]
-👉 URL del modelo: [url-del-proveedor]
-👉 Nombre del modelo: [nombre-del-modelo]
-```
+**During initial setup (`sentinel init`):**
+Sentinel will guide you through adding each provider interactively.
+1. Choose provider type
+2. Enter API URL (defaults are provided)
+3. Enter API Key
+4. Select model (Sentinel will try to fetch the list for you)
+5. Choose if you want to add more providers
 
 **In .sentinelrc.toml:**
 ```toml
@@ -129,17 +144,21 @@ SEGURO - La implementación de autenticación JWT es correcta.
 
 ## Automatic Model Listing
 
-Sentinel can automatically list available models during configuration (currently supported for Gemini):
+Sentinel automatically lists available models for almost all supported providers:
 
 ```
-Fetching available models from Gemini...
+🤖 CONFIGURACIÓN DE LA IA (#1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+? Selecciona el proveedor: Groq
+? URL de la API: https://api.groq.com/openai
+? API Key: gsk_...
 
-Available models:
-  1. gemini-2.0-flash
-  2. gemini-1.5-pro
-  3. gemini-1.5-flash
+🔍 Obteniendo modelos disponibles de Groq...
 
-Select model number: 1
+? Selecciona el modelo:
+  1. llama-3.1-70b-versatile
+  2. llama-3.1-8b-instant
+> 3. mixtape-8x7b-32768
 ```
 
 ---

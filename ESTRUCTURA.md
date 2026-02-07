@@ -56,7 +56,7 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 
 #### `ai/mod.rs`
 - Define el módulo y sus re-exports públicos
-- API pública: `analizar_arquitectura`, `limpiar_cache`, `consultar_ia_dinamico`, `TaskType`, `detectar_framework_con_ia`, `listar_modelos_gemini`
+- API pública: `analizar_arquitectura`, `limpiar_cache`, `consultar_ia_dinamico`, `TaskType`, `detectar_framework_con_ia`
 
 #### `ai/cache.rs`
 **Responsabilidad**: Sistema de caché de respuestas de IA
@@ -74,8 +74,8 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 **Responsabilidad**: Comunicación con APIs de proveedores de IA
 
 **Funciones públicas**:
-- `consultar_ia_dinamico(prompt, task_type, config, stats, project_path)` - Punto de entrada con caché y fallback
-- `consultar_ia(prompt, api_key, base_url, model_name, stats)` - Cliente base multi-proveedor
+- `consultar_ia_dinamico(prompt, task_type, config, stats, project_path)` - Punto de entrada con caché y fallback secuencial a través de todos los proveedores configurados
+- `consultar_ia(prompt, config, stats)` - Cliente genérico independiente del proveedor
 - `TaskType` enum - Light (commits, docs) vs Deep (arquitectura, debug)
 
 **Implementaciones de proveedores**:
@@ -84,7 +84,7 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 - `consultar_gemini_interactions()` - Google Gemini Interactions API
 
 **Sistema de fallback**:
-- `ejecutar_con_fallback()` - Intenta modelo primario, fallback automático si falla
+- Fallback secuencial: Itera a través de `config.ai_configs`, intentando cada proveedor hasta que uno tenga éxito.
 - Tracking de tokens y costos por consulta
 
 **Dependencias**:
@@ -96,8 +96,7 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 **Responsabilidad**: Detección automática de frameworks con IA
 
 **Funciones públicas**:
-- `detectar_framework_con_ia(project_path, config)` - Analiza proyecto y detecta framework
-- `listar_modelos_gemini(api_key)` - Obtiene modelos disponibles de Gemini
+- `detectar_framework_con_ia(project_path, config)` - Analiza proyecto y deteta framework
 
 **Funciones privadas**:
 - `parsear_deteccion_framework(respuesta)` - Parser JSON con fallback a configuración genérica
@@ -345,9 +344,18 @@ El módulo AI ha sido refactorizado en submódulos especializados para mejor man
 **Estructura de datos**:
 ```rust
 pub struct SentinelConfig {
-    pub nombre_proyecto: String,
-    pub gestor_paquetes: String,
-    pub ignorar_patrones: Vec<String>,
+    pub version: String,
+    pub project_name: String,
+    pub manager: String,
+    pub framework: String,
+    pub architecture_rules: Vec<String>,
+    pub file_extensions: Vec<String>,
+    pub code_language: String,
+    pub parent_patterns: Vec<String>,
+    pub test_patterns: Vec<String>,
+    pub ignore_patterns: Vec<String>,
+    pub ai_configs: Vec<AIConfig>,
+    pub use_cache: bool,
 }
 ```
 
@@ -434,11 +442,12 @@ pub struct SentinelStats {
        │         └──▶ Si no es hijo, usa nombre del archivo actual
        │
        ├──▶ ai::analizar_arquitectura()  (consejo en consola, código en .suggested)
-       │         └──▶ ai::client::consultar_ia_dinamico()  (v4.4.3 modularizado)
+       │         └──▶ ai::client::consultar_ia_dinamico()  (v4.6.0 multi-proveedor)
        │               ├──▶ ai::cache::intentar_leer_cache() [si use_cache=true]
-       │               ├──▶ ai::client::ejecutar_con_fallback() [si no hay caché]
-       │               │     ├──▶ Intenta primary_model
-       │               │     └──▶ Intenta fallback_model [si primary falla]
+       │               ├──▶ ai::client::consultar_ia() [si no hay caché, itera proveedores]
+       │               │     ├──▶ Intenta Config #1
+       │               │     ├──▶ Intenta Config #2 [si #1 falla]
+       │               │     └──▶ ... y así sucesivamente
        │               └──▶ ai::cache::guardar_en_cache() [si éxito]
        │         └──▶ ai::utils::extraer_codigo() [extrae código sugerido]
        │         └──▶ ai::utils::eliminar_bloques_codigo() [muestra consejo]
